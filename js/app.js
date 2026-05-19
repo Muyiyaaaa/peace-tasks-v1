@@ -480,7 +480,7 @@
     container.innerHTML = '';
 
     if (customTasks.length === 0) {
-      container.innerHTML = '<div style="text-align:center;padding:10px;font-size:12px;color:rgba(255,255,255,.3)">暂无自定义任务</div>';
+      container.innerHTML = '<div style="text-align:center;padding:10px;font-size:12px;color:#94a3b8">暂无自定义任务</div>';
       return;
     }
 
