@@ -83,12 +83,23 @@
   }
 
   // ─── GitHub Gist API ─────────────────────────────────────
+  async function fetchWithTimeout(url, options, timeoutMs = 10000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { ...options, signal: controller.signal });
+      return res;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   async function fetchGlobal() {
     if (!HAS_GIST) return null;
     try {
       const headers = { 'Accept': 'application/vnd.github.v3+json' };
       if (GIST_PAT) headers['Authorization'] = `Bearer ${GIST_PAT}`;
-      const res = await fetch(`https://api.github.com/gists/${GIST_ID}`, { headers });
+      const res = await fetchWithTimeout(`https://api.github.com/gists/${GIST_ID}`, { headers });
       if (!res.ok) return null;
       const json = await res.json();
       const file = json.files[GIST_FILE];
@@ -118,7 +129,7 @@
       const body = JSON.stringify({
         files: { [GIST_FILE]: { content: JSON.stringify(merged) } }
       });
-      await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+      await fetchWithTimeout(`https://api.github.com/gists/${GIST_ID}`, {
         method: 'PATCH',
         headers: {
           Authorization: `Bearer ${GIST_PAT}`,
@@ -586,11 +597,16 @@
 
   // ─── 初始化 ─────────────────────────────────────────────────
   async function init() {
+    try {
     updateSyncUI('syncing', HAS_GIST ? '同步中...' : '本地模式');
 
-    // 等待认证初始化完成（从 Gist 加载账号）
+    // 等待认证初始化完成，但加 8 秒超时保护，防止 GitHub API 卡住
     if (typeof AuthAPI !== 'undefined' && AuthAPI.ready) {
-      await AuthAPI.ready;
+      const timeout = new Promise(r => setTimeout(() => r('timeout'), 8000));
+      const result = await Promise.race([AuthAPI.ready, timeout]);
+      if (result === 'timeout') {
+        console.warn('Auth init timeout, proceeding anyway');
+      }
     }
 
     // 立即判断登录状态，弹窗和同步不再互相阻塞
@@ -637,6 +653,13 @@
           updateSyncUI('error', '同步失败');
         }
       }, POLL_MS);
+    }
+    } catch (e) {
+      console.error('Init error:', e);
+      updateSyncUI('error', '初始化异常');
+      // 异常情况下仍然尝试显示登录弹窗
+      if (AUTH_REQUIRED) showAuthModal();
+      isInitialized = true;
     }
   }
 
