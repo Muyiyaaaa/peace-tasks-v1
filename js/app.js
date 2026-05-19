@@ -649,9 +649,20 @@
     // 检查是否已绑定用户名
     const existingName = getUserName(n);
     if (!existingName) {
-      // 首次选择该编号，弹窗输入用户名
-      showNameModal(n);
-      return;
+      // 已登录用户自动绑定用户名，无需弹窗
+      if (AuthAPI && AuthAPI.isLoggedIn()) {
+        const user = AuthAPI.getCurrentUser();
+        userNames[n] = user.username;
+        if (!globalData[n]) globalData[n] = {};
+        globalData[n].name = user.username;
+        globalData[n].num = n;
+        saveGlobal(globalData);
+        saveUserData();
+      } else {
+        // 未登录用户（离线模式）弹窗输入
+        showNameModal(n);
+        return;
+      }
     }
 
     sel = n;
@@ -810,10 +821,23 @@
     updateUI();
     isInitialized = true;
 
-    // 如果已选编号但还没绑用户名，补弹窗
+    // 如果已选编号但还没绑用户名
     if (sel !== null && !getUserName(sel)) {
-      sel = null; // 先不选中，等输入用户名后再选
-      showNameModal(myNum);
+      if (AuthAPI && AuthAPI.isLoggedIn()) {
+        // 已登录用户自动绑定用户名
+        const user = AuthAPI.getCurrentUser();
+        userNames[sel] = user.username;
+        if (!globalData[sel]) globalData[sel] = {};
+        globalData[sel].name = user.username;
+        globalData[sel].num = sel;
+        saveGlobal(globalData);
+        saveUserData();
+        refreshNums();
+        updateUI();
+      } else {
+        sel = null; // 先不选中，等输入用户名后再选
+        showNameModal(myNum);
+      }
     }
 
     if (HAS_GIST) {
@@ -972,6 +996,14 @@
     if (!AuthAPI) return;
 
     if (confirm('确定要退出登录吗？')) {
+      // 清理本地状态
+      sel = null;
+      myNum = null;
+      userNames = {};
+      favorites = [];
+      history = [];
+      customTasks = [];
+      if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
       AuthAPI.logout();
       location.reload(); // 刷新页面重新初始化
     }
