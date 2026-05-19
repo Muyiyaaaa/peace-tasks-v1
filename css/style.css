@@ -113,60 +113,6 @@ body{
   gap:6px;
 }
 
-/* ─── 编号选择 ───────────────────────────── */
-.num-section{margin-bottom:28px}
-.num-grid{
-  display:grid;
-  grid-template-columns:repeat(4,1fr);
-  gap:12px;
-}
-.num-btn{
-  position:relative;
-  padding:18px 0;
-  border-radius:var(--radius-sm);
-  font-size:15px;
-  font-weight:700;
-  cursor:pointer;
-  border:2px solid var(--border);
-  background:var(--surface);
-  color:var(--text-secondary);
-  transition:all .2s cubic-bezier(.4,0,.2,1);
-  text-align:center;
-  user-select:none;
-}
-.num-btn:hover:not(.locked):not(.mine){
-  border-color:var(--accent-blue);
-  color:var(--accent-blue);
-  background:var(--accent-blue-light);
-  transform:translateY(-2px);
-  box-shadow:var(--shadow);
-}
-.num-btn.active{
-  border-color:var(--accent-blue);
-  background:var(--accent-blue);
-  color:#fff;
-  box-shadow:0 4px 16px rgba(79,110,247,.3);
-}
-.num-btn.mine{
-  border-color:var(--accent-green);
-  background:var(--accent-green);
-  color:#fff;
-  box-shadow:0 4px 16px rgba(34,197,94,.25);
-}
-.num-btn.locked{
-  border-color:transparent;
-  background:var(--border-light);
-  color:var(--text-muted);
-  cursor:not-allowed;
-  opacity:.7;
-}
-.num-btn .lock-ico{
-  position:absolute;
-  top:4px;right:6px;
-  font-size:10px;
-  opacity:.7;
-}
-
 /* ─── 全员状态面板 ───────────────────────── */
 .status-section{margin-bottom:28px}
 .status-board{display:flex;flex-direction:column;gap:8px}
@@ -225,6 +171,7 @@ body{
 .status-row .t-type.pub{background:var(--accent-green-light);color:var(--accent-green)}
 .status-row .t-type.sec{background:var(--accent-purple-light);color:var(--accent-purple)}
 .status-row .t-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.status-row .t-time{font-size:10px;color:var(--text-muted);font-weight:500;flex-shrink:0;white-space:nowrap;font-variant-numeric:tabular-nums;margin-left:6px}
 .status-empty{font-size:12px;color:var(--text-muted);font-style:italic;padding:4px 8px}
 
 /* ─── 分类筛选 ───────────────────────────── */
@@ -569,16 +516,6 @@ body{
 }
 .modal-confirm:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(79,110,247,.35)}
 
-/* ─── 编号按钮用户名显示 ──────────────────── */
-.num-btn .num-label{display:block;font-size:15px}
-.num-btn .num-name{
-  display:block;font-size:10px;font-weight:600;
-  opacity:.85;margin-top:2px;
-  max-width:100%;overflow:hidden;
-  text-overflow:ellipsis;white-space:nowrap;
-}
-.num-btn.active .num-name,.num-btn.mine .num-name{opacity:1}
-
 /* ─── 动画 ───────────────────────────────── */
 @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
 .shake{animation:shake .35s ease-in-out}
@@ -686,6 +623,7 @@ body{
   padding:24px;
 }
 .auth-input-group{
+  position:relative;
   margin-bottom:16px;
 }
 .auth-input{
@@ -706,6 +644,21 @@ body{
   color:var(--text-muted);
   font-weight:400;
 }
+/* 密码显示/隐藏切换 */
+.pwd-toggle{
+  position:absolute;
+  right:12px;
+  top:50%;
+  transform:translateY(-50%);
+  cursor:pointer;
+  font-size:16px;
+  user-select:none;
+  opacity:.5;
+  transition:opacity .15s;
+  line-height:1;
+  z-index:1;
+}
+.pwd-toggle:hover{opacity:1}
 .auth-submit-btn{
   width:100%;
   margin-top:8px;

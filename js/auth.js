@@ -7,8 +7,86 @@
   const AUTH_STORAGE_PREFIX = 'pea_auth_';
   const USER_DATA_PREFIX = 'pea_user_';
 
+  // Gist 配置
+  const _cfg = typeof CONFIG !== 'undefined' ? CONFIG : {};
+  const GIST_ID  = _cfg.gist?.id || '';
+  const GIST_PAT = _cfg.gist?.token || '';
+  const GIST_FILE = _cfg.gist?.file || 'peace_task.json';
+  const HAS_GIST = !!GIST_ID;
+
   // 当前登录用户
   let currentUser = null;
+
+  // ─── Gist 工具函数 ──────────────────────────────────
+  async function fetchGist() {
+    if (!GIST_ID) return null;
+    try {
+      const headers = { 'Accept': 'application/vnd.github.v3+json' };
+      if (GIST_PAT) headers['Authorization'] = `Bearer ${GIST_PAT}`;
+      const res = await fetch(`https://api.github.com/gists/${GIST_ID}`, { headers });
+      if (!res.ok) return null;
+      const json = await res.json();
+      const file = json.files[GIST_FILE];
+      if (!file) return {};
+      return JSON.parse(file.content || '{}');
+    } catch (e) {
+      console.warn('Gist fetch error:', e);
+      return null;
+    }
+  }
+
+  async function saveGist(data) {
+    if (!GIST_ID || !GIST_PAT) return;
+    try {
+      const body = JSON.stringify({
+        files: { [GIST_FILE]: { content: JSON.stringify(data) } }
+      });
+      await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${GIST_PAT}`,
+          'Content-Type': 'application/json'
+        },
+        body
+      });
+    } catch (e) {
+      console.warn('Gist save error:', e);
+    }
+  }
+
+  // 将 localStorage 中的账号和数据同步到 Gist
+  async function syncAllToGist() {
+    if (!HAS_GIST) return;
+    try {
+      const gistData = await fetchGist() || {};
+      const users = getAllUsers();
+      gistData._users = users;
+      gistData._userData = {};
+      Object.keys(users).forEach(email => {
+        const safeEmail = email.replace(/[@.]/g, '_');
+        const raw = localStorage.getItem(USER_DATA_PREFIX + safeEmail);
+        if (raw) gistData._userData[email] = JSON.parse(raw);
+      });
+      await saveGist(gistData);
+    } catch (e) {
+      console.warn('Gist sync error:', e);
+    }
+  }
+
+  // 从 Gist 加载账号和数据到 localStorage
+  async function loadFromGist() {
+    const data = await fetchGist();
+    if (!data) return;
+    if (data._users) {
+      localStorage.setItem(AUTH_STORAGE_PREFIX + 'users', JSON.stringify(data._users));
+    }
+    if (data._userData) {
+      Object.entries(data._userData).forEach(([email, ud]) => {
+        const safeEmail = email.replace(/[@.]/g, '_');
+        localStorage.setItem(USER_DATA_PREFIX + safeEmail, JSON.stringify(ud));
+      });
+    }
+  }
 
   // 密码加密（简单哈希，生产环境应使用bcrypt等）
   function hashPassword(password) {
@@ -36,6 +114,7 @@
   // 保存所有用户
   function saveAllUsers(users) {
     localStorage.setItem(AUTH_STORAGE_PREFIX + 'users', JSON.stringify(users));
+    if (HAS_GIST) syncAllToGist();
   }
 
   // 注册用户
@@ -125,6 +204,13 @@
     return getCurrentUser() !== null;
   }
 
+  // 初始化：从 Gist 加载数据到 localStorage
+  const _initPromise = (async function() {
+    if (HAS_GIST) {
+      try { await loadFromGist(); } catch (e) { console.warn('Auth Gist init error:', e); }
+    }
+  })();
+
   // 初始化用户数据空间
   function initUserData(email) {
     const safeEmail = email.replace(/[@.]/g, '_');
@@ -132,8 +218,6 @@
 
     if (!localStorage.getItem(userKey)) {
       localStorage.setItem(userKey, JSON.stringify({
-        myNum: null,
-        userNames: {},
         favorites: [],
         history: [],
         customTasks: []
@@ -166,6 +250,7 @@
 
     userData[key] = value;
     localStorage.setItem(userKey, JSON.stringify(userData));
+    if (HAS_GIST) syncAllToGist();
 
     return true;
   }
@@ -238,7 +323,9 @@
     getAllUserData,
     changePassword,
     changeUsername,
-    isValidEmail
+    isValidEmail,
+    ready: _initPromise,
+    syncToGist
   };
 
 })();

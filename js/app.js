@@ -11,15 +11,11 @@
   const GIST_FILE = _cfg.gist?.file || 'peace_task.json';
   const LOCK_MS  = _cfg.game?.lockDuration || 5 * 60 * 1000;
   const POLL_MS  = _cfg.game?.pollInterval || 5000;
-  const MAX_PLAYERS = _cfg.game?.maxPlayers || 4;
   const HAS_GIST = !!GIST_ID;
   const STORAGE_PREFIX = 'pea_';
   const AUTH_REQUIRED = _cfg.auth?.required !== false; // 默认需要认证
 
   // ─── 状态 ─────────────────────────────────────────────────
-  let sel = null;          // 当前选中的编号
-  let myNum = null;        // 我的编号（用于标识是我领取的）
-  let pendingNum = null;   // 等待输入用户名的编号
   let globalData = {};     // 全局数据
   let timerInterval = null;
   let pubTs = null, secTs = null;
@@ -27,8 +23,6 @@
   let favorites = [];
   let history = [];
   let customTasks = [];
-  // 用户名映射 { 1: "小明", 2: "小红", ... } — 存 localStorage + globalData
-  let userNames = {};
   let isInitialized = false;
 
   // ─── 工具函数 ──────────────────────────────────────────────
@@ -42,15 +36,12 @@
       favorites = JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'favs') || '[]');
       history = JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'history') || '[]');
       customTasks = JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'custom') || '[]');
-      userNames = JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'names') || '{}');
       return;
     }
 
     favorites = AuthAPI.getUserData('favorites') || [];
     history = AuthAPI.getUserData('history') || [];
     customTasks = AuthAPI.getUserData('customTasks') || [];
-    userNames = AuthAPI.getUserData('userNames') || {};
-    myNum = AuthAPI.getUserData('myNum');
   }
 
   // 保存用户数据到认证模块
@@ -59,15 +50,12 @@
       saveLocal('favs', favorites);
       saveLocal('history', history);
       saveLocal('custom', customTasks);
-      saveLocal('names', userNames);
       return;
     }
 
     AuthAPI.setUserData('favorites', favorites);
     AuthAPI.setUserData('history', history);
     AuthAPI.setUserData('customTasks', customTasks);
-    AuthAPI.setUserData('userNames', userNames);
-    if (myNum) AuthAPI.setUserData('myNum', myNum);
   }
 
   function fmt(ms) {
@@ -88,6 +76,10 @@
     if (diff < 3600000) return Math.floor(diff / 60000) + '分钟前';
     if (diff < 86400000) return Math.floor(diff / 3600000) + '小时前';
     return Math.floor(diff / 86400000) + '天前';
+  }
+
+  function isTaskActive(ts) {
+    return ts && (Date.now() - ts) < LOCK_MS;
   }
 
   // ─── GitHub Gist API ─────────────────────────────────────
@@ -114,8 +106,17 @@
       return;
     }
     try {
+      // 合并当前 Gist 数据，避免覆盖 auth 数据（_users, _userData）
+      const currentData = await fetchGlobal();
+      const merged = { ...(currentData || {}), ...data };
+      // 确保 auth 数据不被覆盖
+      if (currentData) {
+        if (currentData._users && !data._users) merged._users = currentData._users;
+        if (currentData._userData && !data._userData) merged._userData = currentData._userData;
+      }
+
       const body = JSON.stringify({
-        files: { [GIST_FILE]: { content: JSON.stringify(data) } }
+        files: { [GIST_FILE]: { content: JSON.stringify(merged) } }
       });
       await fetch(`https://api.github.com/gists/${GIST_ID}`, {
         method: 'PATCH',
@@ -131,28 +132,6 @@
     }
   }
 
-  // ─── 编号占用判断 ──────────────────────────────────────────
-  /** 编号已被任何人占用（领了任务就算占用，不管冷却期） */
-  function isNumTaken(n) {
-    const d = globalData[n];
-    if (!d) return false;
-    return !!(d.pub || d.sec);
-  }
-
-  /** 编号正在冷却期内（用于UI高亮） */
-  function isNumInCooldown(n) {
-    const d = globalData[n];
-    if (!d) return false;
-    const now = Date.now();
-    const pubOk = d.pub && (now - d.pub.ts < LOCK_MS);
-    const secOk = d.sec && (now - d.sec.ts < LOCK_MS);
-    return pubOk || secOk;
-  }
-
-  function isMyNum(n) {
-    return myNum === n;
-  }
-
   // ─── 任务获取 ──────────────────────────────────────────────
   function getFilteredEvents() {
     let pool = [...EVENTS, ...customTasks];
@@ -162,9 +141,12 @@
     return pool;
   }
 
-  function getTask(n, type) {
-    const d = globalData[n];
+  function getMyTask(type) {
+    if (!AuthAPI || !AuthAPI.isLoggedIn()) return null;
+    const email = AuthAPI.getCurrentUser().email;
+    const d = globalData[email];
     if (!d || !d[type]) return null;
+    if (!isTaskActive(d[type].ts)) return null; // 任务已过期
     return { idx: d[type].idx, ts: d[type].ts };
   }
 
@@ -226,38 +208,6 @@
   }
 
   // ─── UI 更新 ────────────────────────────────────────────────
-  function refreshNums() {
-    for (let i = 1; i <= MAX_PLAYERS; i++) {
-      const el = document.getElementById('nb' + i);
-      if (!el) continue;
-      el.className = 'num-btn';
-      // 清除旧的锁标识
-      const oldIco = el.querySelector('.lock-ico');
-      if (oldIco) oldIco.remove();
-
-      // 构建按钮内容：编号 + 用户名
-      const userName = userNames[i] || (globalData[i] && globalData[i].name) || '';
-      if (userName) {
-        el.innerHTML = `<span class="num-label">${i}号</span><span class="num-name">${userName}</span>`;
-      } else {
-        el.innerHTML = `<span class="num-label">${i}号</span>`;
-      }
-
-      if (i === sel) {
-        el.classList.add('active');
-      } else if (isMyNum(i)) {
-        el.classList.add('mine');
-      } else if (isNumTaken(i)) {
-        // 被其他人占用 → 锁定，不可选
-        el.classList.add('locked');
-        const ico = document.createElement('span');
-        ico.className = 'lock-ico';
-        ico.textContent = '🔒';
-        el.appendChild(ico);
-      }
-    }
-  }
-
   function updateSyncUI(status, text) {
     const dot = document.getElementById('syncDot');
     const txt = document.getElementById('syncText');
@@ -267,7 +217,7 @@
 
   /** 只更新某一侧任务卡片，避免全局重绘闪烁 */
   function updatePublicCard() {
-    const pub = getTask(sel, 'pub');
+    const pub = getMyTask('pub');
     if (pub) {
       const ev = EVENTS[pub.idx % EVENTS.length];
       showPublicTask(ev);
@@ -283,7 +233,7 @@
   }
 
   function updateSecretCard() {
-    const sec = getTask(sel, 'sec');
+    const sec = getMyTask('sec');
     if (sec) {
       const ev = EVENTS[sec.idx % EVENTS.length];
       showSecretTask(ev, true);
@@ -299,24 +249,12 @@
   }
 
   function updateUI() {
-    if (sel === null) {
-      document.getElementById('publicBtn').disabled = true;
-      document.getElementById('publicBtn').textContent = '选编号';
-      document.getElementById('secretBtn').disabled = true;
-      document.getElementById('secretBtn').textContent = '选编号';
-      showPublicEmpty();
-      showSecretEmpty();
-      document.getElementById('timerSection').classList.remove('on');
-      updateStatusBoard();
-      return;
-    }
-
     updatePublicCard();
     updateSecretCard();
 
     // 计时器
-    const pub = getTask(sel, 'pub');
-    const sec = getTask(sel, 'sec');
+    const pub = getMyTask('pub');
+    const sec = getMyTask('sec');
     const hasLock = (pub && pub.ts) || (sec && sec.ts);
     if (hasLock) {
       document.getElementById('timerSection').classList.add('on');
@@ -388,8 +326,14 @@
     if (timerInterval) clearInterval(timerInterval);
 
     function tick() {
-      const pub = getTask(sel, 'pub');
-      const sec = getTask(sel, 'sec');
+      const pub = getMyTask('pub');
+      const sec = getMyTask('sec');
+
+      // 所有任务已过期，刷新UI并停止计时
+      if (!pub && !sec) {
+        updateUI();
+        return;
+      }
 
       if (pub) {
         const rem = Math.max(0, LOCK_MS - (Date.now() - pub.ts));
@@ -409,8 +353,6 @@
       if (pub) minRem = Math.min(minRem, LOCK_MS - (Date.now() - pub.ts));
       if (sec) minRem = Math.min(minRem, LOCK_MS - (Date.now() - sec.ts));
       document.getElementById('timerText').textContent = fmt(Math.max(0, minRem));
-
-      refreshNums();
     }
 
     tick();
@@ -423,67 +365,62 @@
     if (!board) return;
     board.innerHTML = '';
 
-    for (let i = 1; i <= MAX_PLAYERS; i++) {
-      const d = globalData[i];
-      const card = document.createElement('div');
-      card.className = 'status-card' + (i === sel ? ' my' : '');
+    const currentUser = AuthAPI && AuthAPI.getCurrentUser();
+    const currentEmail = currentUser ? currentUser.email : null;
 
-      // 头像/编号
+    Object.keys(globalData).forEach(email => {
+      const d = globalData[email];
+      const isMine = email === currentEmail;
+      const card = document.createElement('div');
+      card.className = 'status-card' + (isMine ? ' my' : '');
+
+      // 头像
       const avatar = document.createElement('div');
       avatar.className = 'status-avatar';
-      avatar.textContent = i;
+      avatar.textContent = (d && d.username) ? d.username.charAt(0) : '?';
       card.appendChild(avatar);
 
       // 内容区
       const body = document.createElement('div');
       body.className = 'status-body';
 
-      // 头部：名字 + 时间
+      // 头部：名字
       const head = document.createElement('div');
       head.className = 'status-head';
       const name = document.createElement('span');
       name.className = 'status-name';
-      const uName = userNames[i] || (d && d.name) || '';
-      name.textContent = uName ? uName + '（' + i + '号）' : i + '号';
+      name.textContent = (d && d.username) || email;
       head.appendChild(name);
-
-      const timeEl = document.createElement('span');
-      timeEl.className = 'status-time';
-      if (d && (d.pub || d.sec)) {
-        const ts = d.pub ? d.pub.ts : d.sec.ts;
-        timeEl.textContent = fmtTime(ts);
-      } else {
-        timeEl.textContent = '等待中';
-      }
-      head.appendChild(timeEl);
       body.appendChild(head);
 
       // 任务列表
       const list = document.createElement('div');
       list.className = 'status-task-list';
 
-      if (d && d.pub) {
+      const hasPub = d && d.pub && isTaskActive(d.pub.ts);
+      const hasSec = d && d.sec && isTaskActive(d.sec.ts);
+
+      if (hasPub) {
         const row = document.createElement('div');
         row.className = 'status-row';
         const ev = EVENTS[d.pub.idx % EVENTS.length];
-        row.innerHTML = `<span class="t-type pub">公开</span><span class="t-text">${ev ? ev.text : '(已领取)'}</span>`;
+        row.innerHTML = `<span class="t-type pub">公开</span><span class="t-text">${ev ? ev.text : '(已领取)'}</span><span class="t-time">${fmtTime(d.pub.ts)}</span>`;
         list.appendChild(row);
       }
 
-      if (d && d.sec) {
+      if (hasSec) {
         const row = document.createElement('div');
         row.className = 'status-row';
-        const isMine = isMyNum(i);
         if (isMine) {
           const ev = EVENTS[d.sec.idx % EVENTS.length];
-          row.innerHTML = `<span class="t-type sec">隐藏</span><span class="t-text">${ev ? ev.text : '(已领取)'}</span>`;
+          row.innerHTML = `<span class="t-type sec">隐藏</span><span class="t-text">${ev ? ev.text : '(已领取)'}</span><span class="t-time">${fmtTime(d.sec.ts)}</span>`;
         } else {
-          row.innerHTML = `<span class="t-type sec">隐藏</span><span class="t-text">🔒 已领取</span>`;
+          row.innerHTML = `<span class="t-type sec">隐藏</span><span class="t-text">🔒 已领取</span><span class="t-time">${fmtTime(d.sec.ts)}</span>`;
         }
         list.appendChild(row);
       }
 
-      if (!d || (!d.pub && !d.sec)) {
+      if (!hasPub && !hasSec) {
         const empty = document.createElement('div');
         empty.className = 'status-empty';
         empty.textContent = '尚未领取任务';
@@ -493,7 +430,7 @@
       body.appendChild(list);
       card.appendChild(body);
       board.appendChild(card);
-    }
+    });
   }
 
   // ─── 筛选器渲染 ──────────────────────────────────────────
@@ -559,175 +496,55 @@
     });
   }
 
-  // ─── 用户名弹窗 ─────────────────────────────────────────────
-  function showNameModal(n) {
-    pendingNum = n;
-    const modal = document.getElementById('nameModal');
-    const input = document.getElementById('nameInput');
-    const label = document.getElementById('nameNumLabel');
-    const hint = document.getElementById('nameHint');
-    label.textContent = n;
-    input.value = '';
-    hint.textContent = '';
-    modal.classList.add('show');
-    setTimeout(() => input.focus(), 300);
-  }
-
-  function hideNameModal() {
-    const modal = document.getElementById('nameModal');
-    modal.classList.remove('show');
-    pendingNum = null;
-  }
-
-  window.cancelName = function() {
-    hideNameModal();
-  };
-
-  window.confirmName = function() {
-    const input = document.getElementById('nameInput');
-    const hint = document.getElementById('nameHint');
-    const name = input.value.trim();
-
-    if (!name) {
-      hint.textContent = '请输入用户名';
-      input.focus();
-      return;
-    }
-    if (name.length > 7) {
-      hint.textContent = '用户名最多7个字符';
-      input.focus();
-      return;
-    }
-
-    // 保存用户名
-    userNames[pendingNum] = name;
-
-    // 同步到 globalData
-    if (!globalData[pendingNum]) globalData[pendingNum] = {};
-    globalData[pendingNum].name = name;
-    saveGlobal(globalData);
-
-    // 保存用户数据
-    saveUserData();
-
-    const n = pendingNum;
-    hideNameModal();
-
-    // 完成选号流程
-    sel = n;
-    myNum = n;
-    refreshNums();
-    updateUI();
-    showToast(name + '，欢迎！');
-  };
-
-  // 回车确认
-  document.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter' && document.getElementById('nameModal').classList.contains('show')) {
-      e.preventDefault();
-      window.confirmName();
-    }
-  });
-
-  // 获取编号对应的用户名
-  function getUserName(n) {
-    return userNames[n] || (globalData[n] && globalData[n].name) || '';
-  }
-
   // ─── 交互 ─────────────────────────────────────────────────
-  window.selectNum = function(n) {
-    if (sel === n) return;
-    // 被其他人占用的编号不可选
-    if (isNumTaken(n) && !isMyNum(n)) {
-      const el = document.getElementById('nb' + n);
-      el.classList.add('shake');
-      setTimeout(() => el.classList.remove('shake'), 300);
-      showToast(n + '号已被占用');
-      return;
-    }
-
-    // 检查是否已绑定用户名
-    const existingName = getUserName(n);
-    if (!existingName) {
-      // 已登录用户自动绑定用户名，无需弹窗
-      if (AuthAPI && AuthAPI.isLoggedIn()) {
-        const user = AuthAPI.getCurrentUser();
-        userNames[n] = user.username;
-        if (!globalData[n]) globalData[n] = {};
-        globalData[n].name = user.username;
-        globalData[n].num = n;
-        saveGlobal(globalData);
-        saveUserData();
-      } else {
-        // 未登录用户（离线模式）弹窗输入
-        showNameModal(n);
-        return;
-      }
-    }
-
-    sel = n;
-    myNum = n;
-    saveUserData();
-    refreshNums();
-    updateUI();
-  };
 
   window.claimPublic = async function() {
-    if (sel === null) return;
+    if (!AuthAPI || !AuthAPI.isLoggedIn()) return;
+
+    const user = AuthAPI.getCurrentUser();
+    const email = user.email;
 
     const pool = getFilteredEvents();
     const idx = Math.floor(Math.random() * pool.length);
     const realIdx = EVENTS.indexOf(pool[idx]);
     const ts = Date.now();
 
-    if (!globalData[sel]) globalData[sel] = {};
-    globalData[sel].pub = { idx: realIdx >= 0 ? realIdx : idx, ts };
-    globalData[sel].num = sel;
-
-    // 先立即更新本地 UI，再异步保存（避免等待网络导致的闪烁）
-    if (!myNum) {
-      myNum = sel;
-      saveUserData();
-    }
+    if (!globalData[email]) globalData[email] = {};
+    globalData[email].pub = { idx: realIdx >= 0 ? realIdx : idx, ts };
+    globalData[email].username = user.username;
 
     const ev = pool[idx];
     addHistory(ev.icon, ev.text, ev.label);
 
     pubTs = ts;
-    refreshNums();
-    updatePublicCard();   // 只更新明牌卡片
-    updateStatusBoard();  // 更新状态面板
-    // 确保计时器也更新
+    updatePublicCard();
+    updateStatusBoard();
     document.getElementById('timerSection').classList.add('on');
     startTimer();
 
-    // 异步保存到 Gist
     saveGlobal(globalData);
   };
 
   window.claimSecret = async function() {
-    if (sel === null) return;
+    if (!AuthAPI || !AuthAPI.isLoggedIn()) return;
+
+    const user = AuthAPI.getCurrentUser();
+    const email = user.email;
 
     const pool = getFilteredEvents();
     const idx = Math.floor(Math.random() * pool.length);
     const realIdx = EVENTS.indexOf(pool[idx]);
     const ts = Date.now();
 
-    if (!globalData[sel]) globalData[sel] = {};
-    globalData[sel].sec = { idx: realIdx >= 0 ? realIdx : idx, ts };
-    globalData[sel].num = sel;
-
-    if (!myNum) {
-      myNum = sel;
-      saveUserData();
-    }
+    if (!globalData[email]) globalData[email] = {};
+    globalData[email].sec = { idx: realIdx >= 0 ? realIdx : idx, ts };
+    globalData[email].username = user.username;
 
     const ev = pool[idx];
     addHistory(ev.icon, ev.text, ev.label);
 
     secTs = ts;
-    refreshNums();
-    updateSecretCard();   // 只更新隐藏卡片（不影响明牌）
+    updateSecretCard();
     updateStatusBoard();
     document.getElementById('timerSection').classList.add('on');
     startTimer();
@@ -736,8 +553,7 @@
   };
 
   window.revealSecret = function() {
-    if (sel === null) return;
-    const sec = getTask(sel, 'sec');
+    const sec = getMyTask('sec');
     if (!sec) return;
     const ev = EVENTS[sec.idx % EVENTS.length];
     showSecretTask(ev, false);
@@ -772,6 +588,11 @@
   async function init() {
     updateSyncUI('syncing', HAS_GIST ? '同步中...' : '本地模式');
 
+    // 等待认证初始化完成（从 Gist 加载账号）
+    if (typeof AuthAPI !== 'undefined' && AuthAPI.ready) {
+      await AuthAPI.ready;
+    }
+
     // 检查认证
     if (AUTH_REQUIRED && typeof AuthAPI !== 'undefined') {
       if (!AuthAPI.isLoggedIn()) {
@@ -787,9 +608,6 @@
     // 加载用户数据
     loadUserData();
 
-    const savedMyNum = myNum;
-    if (savedMyNum) myNum = parseInt(savedMyNum);
-
     if (HAS_GIST) {
       const data = await fetchGlobal();
       if (data === null) {
@@ -804,58 +622,18 @@
       updateSyncUI('', '本地模式');
     }
 
-    if (myNum) sel = myNum;
-
-    // 从 globalData 同步其他用户的用户名（globalData 优先）
-    for (let i = 1; i <= MAX_PLAYERS; i++) {
-      if (globalData[i] && globalData[i].name) {
-        userNames[i] = globalData[i].name;
-      }
-    }
-    saveUserData();
-
     renderFilters();
     renderCustomTasks();
 
-    refreshNums();
     updateUI();
     isInitialized = true;
-
-    // 如果已选编号但还没绑用户名
-    if (sel !== null && !getUserName(sel)) {
-      if (AuthAPI && AuthAPI.isLoggedIn()) {
-        // 已登录用户自动绑定用户名
-        const user = AuthAPI.getCurrentUser();
-        userNames[sel] = user.username;
-        if (!globalData[sel]) globalData[sel] = {};
-        globalData[sel].name = user.username;
-        globalData[sel].num = sel;
-        saveGlobal(globalData);
-        saveUserData();
-        refreshNums();
-        updateUI();
-      } else {
-        sel = null; // 先不选中，等输入用户名后再选
-        showNameModal(myNum);
-      }
-    }
 
     if (HAS_GIST) {
       setInterval(async () => {
         const data = await fetchGlobal();
         if (data !== null) {
           globalData = data;
-          // 同步用户名（globalData 优先）
-          let nameChanged = false;
-          for (let i = 1; i <= MAX_PLAYERS; i++) {
-            if (data[i] && data[i].name) {
-              userNames[i] = data[i].name;
-              nameChanged = true;
-            }
-          }
-          if (nameChanged) saveUserData();
           updateSyncUI('ok', '已同步');
-          refreshNums();
           updateUI();
         } else {
           updateSyncUI('error', '同步失败');
@@ -933,11 +711,14 @@
       updateAuthUI();
       loadUserData();
 
+      // 清空表单字段
+      document.getElementById('loginEmail').value = '';
+      document.getElementById('loginPassword').value = '';
+
       // 重新初始化
       if (!isInitialized) {
         init();
       } else {
-        refreshNums();
         updateUI();
       }
 
@@ -976,11 +757,16 @@
         updateAuthUI();
         loadUserData();
 
+        // 清空表单字段
+        document.getElementById('regEmail').value = '';
+        document.getElementById('regPassword').value = '';
+        document.getElementById('regConfirmPassword').value = '';
+        document.getElementById('regUsername').value = '';
+
         // 重新初始化
         if (!isInitialized) {
           init();
         } else {
-          refreshNums();
           updateUI();
         }
 
@@ -997,9 +783,6 @@
 
     if (confirm('确定要退出登录吗？')) {
       // 清理本地状态
-      sel = null;
-      myNum = null;
-      userNames = {};
       favorites = [];
       history = [];
       customTasks = [];
@@ -1009,11 +792,22 @@
     }
   };
 
+  // 密码显示/隐藏切换
+  window.togglePwd = function(id, el) {
+    const input = document.getElementById(id);
+    if (input.type === 'password') {
+      input.type = 'text';
+      el.textContent = '🙈';
+    } else {
+      input.type = 'password';
+      el.textContent = '👁️';
+    }
+  };
+
   // 回车键处理
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Enter') {
       const authModal = document.getElementById('authModal');
-      const nameModal = document.getElementById('nameModal');
 
       if (authModal && authModal.classList.contains('show')) {
         e.preventDefault();
@@ -1023,9 +817,6 @@
         } else {
           window.handleRegister();
         }
-      } else if (nameModal && nameModal.classList.contains('show')) {
-        e.preventDefault();
-        window.confirmName();
       }
     }
   });

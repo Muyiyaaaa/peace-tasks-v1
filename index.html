@@ -30,17 +30,6 @@
     <span id="syncText">同步中...</span>
   </div>
 
-  <!-- 选号 -->
-  <div class="num-section">
-    <div class="section-title">🎯 选择你的编号</div>
-    <div class="num-grid" id="numRow">
-      <div class="num-btn" id="nb1" onclick="selectNum(1)">1号</div>
-      <div class="num-btn" id="nb2" onclick="selectNum(2)">2号</div>
-      <div class="num-btn" id="nb3" onclick="selectNum(3)">3号</div>
-      <div class="num-btn" id="nb4" onclick="selectNum(4)">4号</div>
-    </div>
-  </div>
-
   <!-- 全员任务状态 -->
   <div class="status-section">
     <div class="section-title">👥 全员任务状态</div>
@@ -61,7 +50,7 @@
     </div>
     <div class="empty-state" id="publicEmpty">
       <div class="empty-ico">📝</div>
-      <p>选择编号后点击下方按钮领取</p>
+      <p>登录后点击下方按钮即可领取任务</p>
     </div>
     <div id="publicContent" style="display:none">
       <div class="card-text" id="publicText"></div>
@@ -144,20 +133,6 @@
     </div>
   </div>
 
-  <!-- 用户名输入弹窗（离线模式） -->
-  <div class="modal-overlay" id="nameModal">
-    <div class="modal-card">
-      <div class="modal-title">👤 设置用户名</div>
-      <div class="modal-desc">为 <span id="nameNumLabel">1</span> 号设置你的昵称</div>
-      <input class="modal-input" id="nameInput" type="text" maxlength="7" placeholder="输入昵称（最多7字）" autocomplete="off">
-      <div class="modal-hint" id="nameHint"></div>
-      <div class="modal-btns">
-        <button class="modal-btn modal-cancel" onclick="cancelName()">取消</button>
-        <button class="modal-btn modal-confirm" onclick="confirmName()">确认</button>
-      </div>
-    </div>
-  </div>
-
   <!-- 登录/注册弹窗 -->
   <div class="modal-overlay" id="authModal">
     <div class="modal-card auth-modal-card">
@@ -174,6 +149,7 @@
         </div>
         <div class="auth-input-group">
           <input class="modal-input auth-input" id="loginPassword" type="password" placeholder="密码" autocomplete="current-password">
+          <span class="pwd-toggle" onclick="togglePwd('loginPassword',this)">👁️</span>
         </div>
         <div class="modal-hint" id="loginHint"></div>
         <button class="modal-btn modal-confirm auth-submit-btn" onclick="handleLogin()">登录</button>
@@ -187,9 +163,11 @@
         </div>
         <div class="auth-input-group">
           <input class="modal-input auth-input" id="regPassword" type="password" placeholder="密码（至少6位）" autocomplete="new-password">
+          <span class="pwd-toggle" onclick="togglePwd('regPassword',this)">👁️</span>
         </div>
         <div class="auth-input-group">
           <input class="modal-input auth-input" id="regConfirmPassword" type="password" placeholder="确认密码" autocomplete="new-password">
+          <span class="pwd-toggle" onclick="togglePwd('regConfirmPassword',this)">👁️</span>
         </div>
         <div class="auth-input-group">
           <input class="modal-input auth-input" id="regUsername" type="text" maxlength="7" placeholder="用户名（最多7字）" autocomplete="username">
@@ -204,7 +182,6 @@
   <div class="rules-card">
     <div class="rule"><span class="rule-ico">📋</span> 任务全队可见，放在桌面互相监督</div>
     <div class="rule"><span class="rule-ico">🔒</span> 隐藏任务仅自己知道，完成有惊喜</div>
-    <div class="rule"><span class="rule-ico">⚠️</span> 编号被占用后，其他人不可重复领取</div>
     <div class="rule"><span class="rule-ico">⭐</span> 点击☆收藏喜欢的任务</div>
     <div class="rule"><span class="rule-ico">✨</span> 可以添加自定义任务到任务池</div>
   </div>
