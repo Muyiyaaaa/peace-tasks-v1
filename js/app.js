@@ -743,9 +743,9 @@
 
     if (myNum) sel = myNum;
 
-    // 从 globalData 同步其他用户的用户名
+    // 从 globalData 同步其他用户的用户名（globalData 优先）
     for (let i = 1; i <= MAX_PLAYERS; i++) {
-      if (globalData[i] && globalData[i].name && !userNames[i]) {
+      if (globalData[i] && globalData[i].name) {
         userNames[i] = globalData[i].name;
       }
     }
@@ -757,18 +757,26 @@
     refreshNums();
     updateUI();
 
+    // 如果已选编号但还没绑用户名，补弹窗
+    if (sel !== null && !getUserName(sel)) {
+      sel = null; // 先不选中，等输入用户名后再选
+      showNameModal(myNum);
+    }
+
     if (HAS_GIST) {
       setInterval(async () => {
         const data = await fetchGlobal();
         if (data !== null) {
           globalData = data;
-          // 同步用户名
+          // 同步用户名（globalData 优先）
+          let nameChanged = false;
           for (let i = 1; i <= MAX_PLAYERS; i++) {
-            if (data[i] && data[i].name && !userNames[i]) {
+            if (data[i] && data[i].name) {
               userNames[i] = data[i].name;
+              nameChanged = true;
             }
           }
-          localStorage.setItem(STORAGE_PREFIX + 'names', JSON.stringify(userNames));
+          if (nameChanged) localStorage.setItem(STORAGE_PREFIX + 'names', JSON.stringify(userNames));
           updateSyncUI('ok', '已同步');
           refreshNums();
           updateUI();
