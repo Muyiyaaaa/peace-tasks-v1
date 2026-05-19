@@ -1,3 +1,27 @@
-# 系统文件
+# GitHub Pages 部署配置
+# 确保这些文件被包含在仓库中
+
+# 操作系统文件
 .DS_Store
 Thumbs.db
+
+# 编辑器文件
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 日志文件
+*.log
+npm-debug.log*
+
+# 依赖目录（如果有）
+node_modules/
+
+# 环境变量（不要提交敏感信息）
+.env
+.env.local
+
+# 临时文件
+*.tmp
+*.temp
