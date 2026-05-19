@@ -332,7 +332,7 @@
     changeUsername,
     isValidEmail,
     ready: _initPromise,
-    syncToGist
+    syncToGist: syncAllToGist
   };
 
 })();
