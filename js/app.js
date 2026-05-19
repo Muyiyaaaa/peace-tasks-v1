@@ -593,21 +593,19 @@
       await AuthAPI.ready;
     }
 
-    // 检查认证
-    if (AUTH_REQUIRED && typeof AuthAPI !== 'undefined') {
-      if (!AuthAPI.isLoggedIn()) {
-        // 未登录，显示登录弹窗
-        showAuthModal();
-        return;
-      } else {
-        // 已登录，更新UI
-        updateAuthUI();
-      }
+    // 立即判断登录状态，弹窗和同步不再互相阻塞
+    const loggedIn = typeof AuthAPI !== 'undefined' && AuthAPI.isLoggedIn();
+    if (AUTH_REQUIRED && !loggedIn) {
+      showAuthModal();
+    } else if (loggedIn) {
+      updateAuthUI();
+      loadUserData();
     }
 
-    // 加载用户数据
-    loadUserData();
+    // 标记初始化完成，避免 handleLogin 重复执行完整 init
+    isInitialized = true;
 
+    // 加载 Gist 数据（弹窗已先行显示，用户可立即交互）
     if (HAS_GIST) {
       const data = await fetchGlobal();
       if (data === null) {
@@ -624,11 +622,11 @@
 
     renderFilters();
     renderCustomTasks();
-
     updateUI();
-    isInitialized = true;
 
-    if (HAS_GIST) {
+    // 启动轮询（带防重入保护）
+    if (HAS_GIST && !window._peaPollingStarted) {
+      window._peaPollingStarted = true;
       setInterval(async () => {
         const data = await fetchGlobal();
         if (data !== null) {
