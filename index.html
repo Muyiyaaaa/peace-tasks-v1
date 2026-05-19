@@ -11,7 +11,7 @@
   <div class="header">
     <div class="logo">🎮</div>
     <h1>和平精英 · 双线任务</h1>
-    <p>全局同步 · 每种任务 5分钟冷却</p>
+    <p>全局同步 · 每种任务 5 分钟冷却</p>
   </div>
 
   <div class="sync-bar">
@@ -21,8 +21,8 @@
 
   <!-- 选号 -->
   <div class="num-section">
-    <h2>选择你的编号</h2>
-    <div class="num-row" id="numRow">
+    <div class="section-title">🎯 选择你的编号</div>
+    <div class="num-grid" id="numRow">
       <div class="num-btn" id="nb1" onclick="selectNum(1)">1号</div>
       <div class="num-btn" id="nb2" onclick="selectNum(2)">2号</div>
       <div class="num-btn" id="nb3" onclick="selectNum(3)">3号</div>
@@ -32,58 +32,60 @@
 
   <!-- 全员任务状态 -->
   <div class="status-section">
-    <h2>👥 全员任务状态</h2>
+    <div class="section-title">👥 全员任务状态</div>
     <div class="status-board" id="statusBoard"></div>
   </div>
 
   <!-- 分类筛选 -->
   <div class="filter-section">
-    <h2>任务分类筛选</h2>
-    <div class="filter-tags" id="filterTags"></div>
+    <div class="section-title">🏷️ 任务分类</div>
+    <div class="filter-pills" id="filterTags"></div>
   </div>
 
   <!-- 明牌任务 -->
   <div class="task-card public" id="publicCard">
-    <div class="card-glow"></div>
     <div class="card-header">
-      <span class="card-icon">📋</span>
-      <span class="card-title">任务 · 全队可见</span>
+      <div class="card-icon-wrap">📋</div>
+      <div class="card-tag">任务 · 全队可见</div>
     </div>
     <div class="empty-state" id="publicEmpty">
-      <div class="empty-icon">📝</div>
+      <div class="empty-ico">📝</div>
       <p>选择编号后点击下方按钮领取</p>
     </div>
     <div id="publicContent" style="display:none">
       <div class="card-text" id="publicText"></div>
-      <span class="card-badge" id="publicBadge"></span>
+      <div class="card-meta">
+        <span class="card-badge" id="publicBadge"></span>
+      </div>
       <div class="action-row">
-        <button class="action-btn" id="publicFavBtn">☆</button>
-        <button class="action-btn" id="publicShareBtn">🔗 分享</button>
+        <button class="action-chip" id="publicFavBtn">☆ 收藏</button>
+        <button class="action-chip" id="publicShareBtn">🔗 分享</button>
       </div>
     </div>
   </div>
 
   <!-- 隐藏任务 -->
   <div class="task-card secret" id="secretCard">
-    <div class="card-glow"></div>
     <div class="card-header">
-      <span class="card-icon">🔒</span>
-      <span class="card-title">隐藏 · 仅自己可见</span>
+      <div class="card-icon-wrap">🔒</div>
+      <div class="card-tag">隐藏 · 仅自己可见</div>
     </div>
     <div class="empty-state" id="secretEmpty">
-      <div class="empty-icon">🤫</div>
+      <div class="empty-ico">🤫</div>
       <p>点击下方按钮领取</p>
     </div>
     <div id="secretContent" style="display:none">
       <div class="card-text" id="secretText"></div>
-      <span class="card-badge" id="secretBadge"></span>
+      <div class="card-meta">
+        <span class="card-badge" id="secretBadge"></span>
+      </div>
       <div class="action-row">
-        <button class="action-btn" id="secretFavBtn">☆</button>
-        <button class="action-btn" id="secretShareBtn">🔗 分享</button>
+        <button class="action-chip" id="secretFavBtn">☆ 收藏</button>
+        <button class="action-chip" id="secretShareBtn">🔗 分享</button>
       </div>
     </div>
     <div class="mask" id="secretMask" style="display:none" onclick="revealSecret()">
-      <div class="mask-icon">👁️</div>
+      <div class="mask-ico">👁️</div>
       <div class="mask-text">点击查看</div>
       <div class="mask-sub">确保队友没在看</div>
     </div>
@@ -91,50 +93,70 @@
 
   <!-- 计时器 -->
   <div class="timer-section" id="timerSection">
-    <div class="timer-header">
-      <span>锁定倒计时</span>
-      <span id="timerText">5:00</span>
+    <div class="timer-head">
+      <span class="timer-label">⏱ 锁定倒计时</span>
+      <span class="timer-val" id="timerText">5:00</span>
     </div>
-    <div class="timer-label">📋 任务</div>
-    <div class="timer-bar-wrap"><div class="timer-bar pub" id="timerFill" style="width:100%"></div></div>
-    <div class="timer-label">🔒 隐藏任务</div>
-    <div class="timer-bar-wrap"><div class="timer-bar sec" id="timerFill2" style="width:100%"></div></div>
+    <div class="timer-row">
+      <div class="timer-row-label">📋 任务</div>
+      <div class="timer-track"><div class="timer-fill pub" id="timerFill" style="width:100%"></div></div>
+    </div>
+    <div class="timer-row">
+      <div class="timer-row-label">🔒 隐藏任务</div>
+      <div class="timer-track"><div class="timer-fill sec" id="timerFill2" style="width:100%"></div></div>
+    </div>
   </div>
 
   <!-- 按钮 -->
   <div class="btn-row">
-    <button class="btn btn-green" id="publicBtn" onclick="claimPublic()" disabled>领取任务</button>
-    <button class="btn btn-purple" id="secretBtn" onclick="claimSecret()" disabled>领取隐藏</button>
+    <button class="btn btn-pub" id="publicBtn" onclick="claimPublic()" disabled>领取任务</button>
+    <button class="btn btn-sec" id="secretBtn" onclick="claimSecret()" disabled>领取隐藏</button>
   </div>
 
   <!-- 自定义任务 -->
   <div class="custom-section">
-    <h2>✨ 自定义任务</h2>
-    <div class="custom-input-row">
-      <input class="custom-input" id="customInput" placeholder="输入自定义任务内容..." maxlength="100">
-      <button class="custom-add-btn" onclick="addCustomTask()">添加</button>
+    <div class="custom-head">
+      <div class="section-title">✨ 自定义任务</div>
     </div>
-    <div id="customList" style="margin-top:8px"></div>
+    <div class="custom-input-wrap">
+      <input class="custom-input" id="customInput" placeholder="输入自定义任务内容..." maxlength="100">
+      <button class="custom-add" onclick="addCustomTask()">添加</button>
+    </div>
+    <div id="customList" class="custom-list"></div>
   </div>
 
   <!-- 历史记录 -->
-  <div class="history-panel">
+  <div class="history-section">
     <button class="history-toggle" id="historyToggle" onclick="toggleHistory()">📋 查看历史</button>
-    <div id="historyPanel" style="display:none">
+    <div class="history-body" id="historyBody" style="display:none">
       <div id="historyList" class="history-list"></div>
     </div>
   </div>
 
-  <!-- 说明 -->
-  <div class="info-box">
-    <div class="rule"><span class="rule-icon">📋</span> 任务全队可见，放在桌面互相监督</div>
-    <div class="rule"><span class="rule-icon">🔒</span> 隐藏任务仅自己知道，完成有惊喜</div>
-    <div class="rule"><span class="rule-icon">⚠️</span> 编号被占用后，其他人不可以重复领取</div>
-    <div class="rule"><span class="rule-icon">⭐</span> 点击☆收藏喜欢的任务</div>
-    <div class="rule"><span class="rule-icon">✨</span> 可以添加自定义任务到任务池</div>
+  <!-- 用户名输入弹窗 -->
+  <div class="modal-overlay" id="nameModal">
+    <div class="modal-card">
+      <div class="modal-title">👤 绑定用户名</div>
+      <div class="modal-desc">为 <span id="nameNumLabel">1</span> 号位设置用户名，队友也能看到哦</div>
+      <input class="modal-input" id="nameInput" type="text" maxlength="7" placeholder="输入用户名（最多7字）" autocomplete="off">
+      <div class="modal-hint" id="nameHint"></div>
+      <div class="modal-btns">
+        <button class="modal-btn modal-cancel" onclick="cancelName()">取消</button>
+        <button class="modal-btn modal-confirm" onclick="confirmName()">确认</button>
+      </div>
+    </div>
   </div>
 
-  <div class="footer">全局数据同步 · GitHub Gist<br>每种任务独立5分钟冷却 · v2.0</div>
+  <!-- 说明 -->
+  <div class="rules-card">
+    <div class="rule"><span class="rule-ico">📋</span> 任务全队可见，放在桌面互相监督</div>
+    <div class="rule"><span class="rule-ico">🔒</span> 隐藏任务仅自己知道，完成有惊喜</div>
+    <div class="rule"><span class="rule-ico">⚠️</span> 编号被占用后，其他人不可重复领取</div>
+    <div class="rule"><span class="rule-ico">⭐</span> 点击☆收藏喜欢的任务</div>
+    <div class="rule"><span class="rule-ico">✨</span> 可以添加自定义任务到任务池</div>
+  </div>
+
+  <div class="footer">全局数据同步 · GitHub Gist<br>每种任务独立5分钟冷却 · v2.1</div>
 </div>
 
 <script src="js/config.js"></script>

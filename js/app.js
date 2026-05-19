@@ -18,6 +18,7 @@
   // ─── 状态 ─────────────────────────────────────────────────
   let sel = null;          // 当前选中的编号
   let myNum = null;        // 我的编号（用于标识是我领取的）
+  let pendingNum = null;   // 等待输入用户名的编号
   let globalData = {};     // 全局数据
   let timerInterval = null;
   let pubTs = null, secTs = null;
@@ -25,6 +26,8 @@
   let favorites = JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'favs') || '[]');
   let history = JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'history') || '[]');
   let customTasks = JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'custom') || '[]');
+  // 用户名映射 { 1: "小明", 2: "小红", ... } — 存 localStorage + globalData
+  let userNames = JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'names') || '{}');
 
   // ─── 工具函数 ──────────────────────────────────────────────
   function saveLocal(key, data) {
@@ -193,8 +196,16 @@
       if (!el) continue;
       el.className = 'num-btn';
       // 清除旧的锁标识
-      const oldOverlay = el.querySelector('.lock-overlay');
-      if (oldOverlay) oldOverlay.remove();
+      const oldIco = el.querySelector('.lock-ico');
+      if (oldIco) oldIco.remove();
+
+      // 构建按钮内容：编号 + 用户名
+      const userName = userNames[i] || (globalData[i] && globalData[i].name) || '';
+      if (userName) {
+        el.innerHTML = `<span class="num-label">${i}号</span><span class="num-name">${userName}</span>`;
+      } else {
+        el.innerHTML = `<span class="num-label">${i}号</span>`;
+      }
 
       if (i === sel) {
         el.classList.add('active');
@@ -203,10 +214,10 @@
       } else if (isNumTaken(i)) {
         // 被其他人占用 → 锁定，不可选
         el.classList.add('locked');
-        const overlay = document.createElement('div');
-        overlay.className = 'lock-overlay';
-        overlay.textContent = '🔒';
-        el.appendChild(overlay);
+        const ico = document.createElement('span');
+        ico.className = 'lock-ico';
+        ico.textContent = '🔒';
+        el.appendChild(ico);
       }
     }
   }
@@ -259,7 +270,7 @@
       document.getElementById('secretBtn').textContent = '选编号';
       showPublicEmpty();
       showSecretEmpty();
-      document.getElementById('timerSection').classList.remove('active');
+      document.getElementById('timerSection').classList.remove('on');
       updateStatusBoard();
       return;
     }
@@ -272,10 +283,10 @@
     const sec = getTask(sel, 'sec');
     const hasLock = (pub && pub.ts) || (sec && sec.ts);
     if (hasLock) {
-      document.getElementById('timerSection').classList.add('active');
+      document.getElementById('timerSection').classList.add('on');
       startTimer();
     } else {
-      document.getElementById('timerSection').classList.remove('active');
+      document.getElementById('timerSection').classList.remove('on');
       if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
     }
 
@@ -296,12 +307,12 @@
 
     const favBtn = document.getElementById('publicFavBtn');
     if (favBtn) {
-      favBtn.textContent = isFavorite(ev.text) ? '★' : '☆';
-      favBtn.className = 'action-btn' + (isFavorite(ev.text) ? ' fav-active' : '');
+      favBtn.textContent = isFavorite(ev.text) ? '★ 已收藏' : '☆ 收藏';
+      favBtn.className = 'action-chip' + (isFavorite(ev.text) ? ' fav-on' : '');
       favBtn.onclick = () => {
         toggleFavorite(ev.text);
-        favBtn.textContent = isFavorite(ev.text) ? '★' : '☆';
-        favBtn.className = 'action-btn' + (isFavorite(ev.text) ? ' fav-active' : '');
+        favBtn.textContent = isFavorite(ev.text) ? '★ 已收藏' : '☆ 收藏';
+        favBtn.className = 'action-chip' + (isFavorite(ev.text) ? ' fav-on' : '');
       };
     }
 
@@ -324,12 +335,12 @@
 
     const favBtn = document.getElementById('secretFavBtn');
     if (favBtn && !masked) {
-      favBtn.textContent = isFavorite(ev.text) ? '★' : '☆';
-      favBtn.className = 'action-btn' + (isFavorite(ev.text) ? ' fav-active' : '');
+      favBtn.textContent = isFavorite(ev.text) ? '★ 已收藏' : '☆ 收藏';
+      favBtn.className = 'action-chip' + (isFavorite(ev.text) ? ' fav-on' : '');
       favBtn.onclick = () => {
         toggleFavorite(ev.text);
-        favBtn.textContent = isFavorite(ev.text) ? '★' : '☆';
-        favBtn.className = 'action-btn' + (isFavorite(ev.text) ? ' fav-active' : '');
+        favBtn.textContent = isFavorite(ev.text) ? '★ 已收藏' : '☆ 收藏';
+        favBtn.className = 'action-chip' + (isFavorite(ev.text) ? ' fav-on' : '');
       };
     }
 
@@ -378,58 +389,74 @@
 
     for (let i = 1; i <= MAX_PLAYERS; i++) {
       const d = globalData[i];
-      const item = document.createElement('div');
-      item.className = 'status-item' + (i === sel ? ' my-status' : '');
+      const card = document.createElement('div');
+      card.className = 'status-card' + (i === sel ? ' my' : '');
 
-      // 编号
-      const numEl = document.createElement('span');
-      numEl.className = 'status-num';
-      numEl.textContent = i + '号';
-      item.appendChild(numEl);
+      // 头像/编号
+      const avatar = document.createElement('div');
+      avatar.className = 'status-avatar';
+      avatar.textContent = i;
+      card.appendChild(avatar);
 
-      // 明牌任务
-      const pubEl = document.createElement('span');
-      pubEl.className = 'status-task pub-task';
-      if (d && d.pub) {
-        const ev = EVENTS[d.pub.idx % EVENTS.length];
-        const isMine = isMyNum(i);
-        pubEl.textContent = ev ? ev.text : '(已领取)';
-        pubEl.title = '领取时间: ' + fmtTime(d.pub.ts);
-        // 添加时间戳
-        const tsEl = document.createElement('span');
-        tsEl.className = 'status-ts';
-        tsEl.textContent = fmtTime(d.pub.ts);
-        pubEl.appendChild(tsEl);
+      // 内容区
+      const body = document.createElement('div');
+      body.className = 'status-body';
+
+      // 头部：名字 + 时间
+      const head = document.createElement('div');
+      head.className = 'status-head';
+      const name = document.createElement('span');
+      name.className = 'status-name';
+      const uName = userNames[i] || (d && d.name) || '';
+      name.textContent = uName ? uName + '（' + i + '号）' : i + '号';
+      head.appendChild(name);
+
+      const timeEl = document.createElement('span');
+      timeEl.className = 'status-time';
+      if (d && (d.pub || d.sec)) {
+        const ts = d.pub ? d.pub.ts : d.sec.ts;
+        timeEl.textContent = fmtTime(ts);
       } else {
-        pubEl.textContent = '—';
-        pubEl.style.opacity = '0.3';
+        timeEl.textContent = '等待中';
       }
-      item.appendChild(pubEl);
+      head.appendChild(timeEl);
+      body.appendChild(head);
 
-      // 隐藏任务（只显示状态，不显示内容）
-      const secEl = document.createElement('span');
-      secEl.className = 'status-task sec-task';
+      // 任务列表
+      const list = document.createElement('div');
+      list.className = 'status-task-list';
+
+      if (d && d.pub) {
+        const row = document.createElement('div');
+        row.className = 'status-row';
+        const ev = EVENTS[d.pub.idx % EVENTS.length];
+        row.innerHTML = `<span class="t-type pub">公开</span><span class="t-text">${ev ? ev.text : '(已领取)'}</span>`;
+        list.appendChild(row);
+      }
+
       if (d && d.sec) {
+        const row = document.createElement('div');
+        row.className = 'status-row';
         const isMine = isMyNum(i);
         if (isMine) {
           const ev = EVENTS[d.sec.idx % EVENTS.length];
-          secEl.textContent = ev ? '🔒 ' + ev.text : '🔒 已领取';
-          secEl.title = '领取时间: ' + fmtTime(d.sec.ts);
+          row.innerHTML = `<span class="t-type sec">隐藏</span><span class="t-text">${ev ? ev.text : '(已领取)'}</span>`;
         } else {
-          secEl.textContent = '🔒 隐藏';
+          row.innerHTML = `<span class="t-type sec">隐藏</span><span class="t-text">🔒 已领取</span>`;
         }
-        // 添加时间戳
-        const tsEl = document.createElement('span');
-        tsEl.className = 'status-ts';
-        tsEl.textContent = fmtTime(d.sec.ts);
-        secEl.appendChild(tsEl);
-      } else {
-        secEl.textContent = '—';
-        secEl.style.opacity = '0.3';
+        list.appendChild(row);
       }
-      item.appendChild(secEl);
 
-      board.appendChild(item);
+      if (!d || (!d.pub && !d.sec)) {
+        const empty = document.createElement('div');
+        empty.className = 'status-empty';
+        empty.textContent = '尚未领取任务';
+        list.appendChild(empty);
+      }
+
+      body.appendChild(list);
+      card.appendChild(body);
+      board.appendChild(card);
     }
   }
 
@@ -440,14 +467,14 @@
     container.innerHTML = '';
 
     const allTag = document.createElement('div');
-    allTag.className = 'filter-tag' + (activeFilter === 'all' ? ' active' : '');
+    allTag.className = 'pill' + (activeFilter === 'all' ? ' active' : '');
     allTag.textContent = '全部';
     allTag.onclick = () => { activeFilter = 'all'; renderFilters(); };
     container.appendChild(allTag);
 
     Object.entries(CATEGORY_MAP).forEach(([icon, name]) => {
       const tag = document.createElement('div');
-      tag.className = 'filter-tag' + (activeFilter === icon ? ' active' : '');
+      tag.className = 'pill' + (activeFilter === icon ? ' active' : '');
       tag.textContent = icon + ' ' + name;
       tag.onclick = () => { activeFilter = icon; renderFilters(); };
       container.appendChild(tag);
@@ -480,20 +507,94 @@
     container.innerHTML = '';
 
     if (customTasks.length === 0) {
-      container.innerHTML = '<div style="text-align:center;padding:10px;font-size:12px;color:#94a3b8">暂无自定义任务</div>';
+      container.innerHTML = '<div style="text-align:center;padding:12px;font-size:12px;color:var(--text-muted)">暂无自定义任务</div>';
       return;
     }
 
     customTasks.forEach((task, idx) => {
       const el = document.createElement('div');
-      el.className = 'history-item';
-      el.innerHTML = `<span class="h-icon">${task.icon}</span><span class="h-text" title="${task.text}">${task.text}</span><span class="h-time" style="cursor:pointer;color:#f44336" data-idx="${idx}">删除</span>`;
-      el.querySelector('[data-idx]').onclick = () => {
+      el.className = 'custom-item';
+      el.innerHTML = `<span class="c-ico">${task.icon}</span><span class="c-text" title="${task.text}">${task.text}</span><span class="c-del" data-idx="${idx}">删除</span>`;
+      el.querySelector('.c-del').onclick = () => {
         removeCustomTask(idx);
         renderCustomTasks();
       };
       container.appendChild(el);
     });
+  }
+
+  // ─── 用户名弹窗 ─────────────────────────────────────────────
+  function showNameModal(n) {
+    pendingNum = n;
+    const modal = document.getElementById('nameModal');
+    const input = document.getElementById('nameInput');
+    const label = document.getElementById('nameNumLabel');
+    const hint = document.getElementById('nameHint');
+    label.textContent = n;
+    input.value = '';
+    hint.textContent = '';
+    modal.classList.add('show');
+    setTimeout(() => input.focus(), 300);
+  }
+
+  function hideNameModal() {
+    const modal = document.getElementById('nameModal');
+    modal.classList.remove('show');
+    pendingNum = null;
+  }
+
+  window.cancelName = function() {
+    hideNameModal();
+  };
+
+  window.confirmName = function() {
+    const input = document.getElementById('nameInput');
+    const hint = document.getElementById('nameHint');
+    const name = input.value.trim();
+
+    if (!name) {
+      hint.textContent = '请输入用户名';
+      input.focus();
+      return;
+    }
+    if (name.length > 7) {
+      hint.textContent = '用户名最多7个字符';
+      input.focus();
+      return;
+    }
+
+    // 保存用户名
+    userNames[pendingNum] = name;
+    localStorage.setItem(STORAGE_PREFIX + 'names', JSON.stringify(userNames));
+
+    // 同步到 globalData
+    if (!globalData[pendingNum]) globalData[pendingNum] = {};
+    globalData[pendingNum].name = name;
+    saveGlobal(globalData);
+
+    const n = pendingNum;
+    hideNameModal();
+
+    // 完成选号流程
+    sel = n;
+    myNum = n;
+    localStorage.setItem(STORAGE_PREFIX + 'my_num', n);
+    refreshNums();
+    updateUI();
+    showToast(name + '，欢迎！');
+  };
+
+  // 回车确认
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && document.getElementById('nameModal').classList.contains('show')) {
+      e.preventDefault();
+      window.confirmName();
+    }
+  });
+
+  // 获取编号对应的用户名
+  function getUserName(n) {
+    return userNames[n] || (globalData[n] && globalData[n].name) || '';
   }
 
   // ─── 交互 ─────────────────────────────────────────────────
@@ -507,7 +608,18 @@
       showToast(n + '号已被占用');
       return;
     }
+
+    // 检查是否已绑定用户名
+    const existingName = getUserName(n);
+    if (!existingName) {
+      // 首次选择该编号，弹窗输入用户名
+      showNameModal(n);
+      return;
+    }
+
     sel = n;
+    myNum = n;
+    localStorage.setItem(STORAGE_PREFIX + 'my_num', n);
     refreshNums();
     updateUI();
   };
@@ -525,8 +637,10 @@
     globalData[sel].num = sel;
 
     // 先立即更新本地 UI，再异步保存（避免等待网络导致的闪烁）
-    myNum = sel;
-    localStorage.setItem(STORAGE_PREFIX + 'my_num', sel);
+    if (!myNum) {
+      myNum = sel;
+      localStorage.setItem(STORAGE_PREFIX + 'my_num', sel);
+    }
 
     const ev = pool[idx];
     addHistory(ev.icon, ev.text, ev.label);
@@ -536,7 +650,7 @@
     updatePublicCard();   // 只更新明牌卡片
     updateStatusBoard();  // 更新状态面板
     // 确保计时器也更新
-    document.getElementById('timerSection').classList.add('active');
+    document.getElementById('timerSection').classList.add('on');
     startTimer();
 
     // 异步保存到 Gist
@@ -555,8 +669,10 @@
     globalData[sel].sec = { idx: realIdx >= 0 ? realIdx : idx, ts };
     globalData[sel].num = sel;
 
-    myNum = sel;
-    localStorage.setItem(STORAGE_PREFIX + 'my_num', sel);
+    if (!myNum) {
+      myNum = sel;
+      localStorage.setItem(STORAGE_PREFIX + 'my_num', sel);
+    }
 
     const ev = pool[idx];
     addHistory(ev.icon, ev.text, ev.label);
@@ -565,7 +681,7 @@
     refreshNums();
     updateSecretCard();   // 只更新隐藏卡片（不影响明牌）
     updateStatusBoard();
-    document.getElementById('timerSection').classList.add('active');
+    document.getElementById('timerSection').classList.add('on');
     startTimer();
 
     saveGlobal(globalData);
@@ -580,15 +696,17 @@
   };
 
   window.toggleHistory = function() {
-    const panel = document.getElementById('historyPanel');
+    const body = document.getElementById('historyBody');
     const btn = document.getElementById('historyToggle');
-    if (panel.style.display === 'none') {
-      panel.style.display = 'block';
+    if (body.style.display === 'none') {
+      body.style.display = 'block';
       btn.textContent = '📋 收起历史';
+      btn.classList.add('on');
       renderHistory();
     } else {
-      panel.style.display = 'none';
+      body.style.display = 'none';
       btn.textContent = '📋 查看历史';
+      btn.classList.remove('on');
     }
   };
 
@@ -625,6 +743,14 @@
 
     if (myNum) sel = myNum;
 
+    // 从 globalData 同步其他用户的用户名
+    for (let i = 1; i <= MAX_PLAYERS; i++) {
+      if (globalData[i] && globalData[i].name && !userNames[i]) {
+        userNames[i] = globalData[i].name;
+      }
+    }
+    localStorage.setItem(STORAGE_PREFIX + 'names', JSON.stringify(userNames));
+
     renderFilters();
     renderCustomTasks();
 
@@ -636,6 +762,13 @@
         const data = await fetchGlobal();
         if (data !== null) {
           globalData = data;
+          // 同步用户名
+          for (let i = 1; i <= MAX_PLAYERS; i++) {
+            if (data[i] && data[i].name && !userNames[i]) {
+              userNames[i] = data[i].name;
+            }
+          }
+          localStorage.setItem(STORAGE_PREFIX + 'names', JSON.stringify(userNames));
           updateSyncUI('ok', '已同步');
           refreshNums();
           updateUI();
