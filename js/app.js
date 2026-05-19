@@ -1,5 +1,5 @@
 /**
- * 和平精英 · 双线任务 - 核心逻辑
+ * 和平精英 · 趣味任务 - 核心逻辑
  */
 (function() {
   'use strict';
@@ -200,7 +200,7 @@
 
   // ─── 分享功能 ──────────────────────────────────────────────
   function shareTask(text) {
-    const shareText = `🎮 和平精英 · 双线任务\n${text}\n\n——来自和平精英任务生成器`;
+    const shareText = `🎮 和平精英 · 趣味任务\n${text}\n\n——来自和平精英趣味任务生成器`;
     if (navigator.share) {
       navigator.share({ title: '和平精英任务', text: shareText }).catch(() => {});
     } else {
