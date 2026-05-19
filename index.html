@@ -8,6 +8,17 @@
 </head>
 <body>
 <div class="container">
+  <!-- 登录状态栏 -->
+  <div class="auth-bar" id="authBar" style="display:none">
+    <div class="auth-user-info">
+      <span class="auth-avatar">👤</span>
+      <span class="auth-username" id="authUsername"></span>
+    </div>
+    <div class="auth-actions">
+      <button class="auth-btn auth-btn-logout" onclick="handleLogout()">退出登录</button>
+    </div>
+  </div>
+
   <div class="header">
     <div class="logo">🎮</div>
     <h1>和平精英 · 双线任务</h1>
@@ -147,6 +158,48 @@
     </div>
   </div>
 
+  <!-- 登录/注册弹窗 -->
+  <div class="modal-overlay" id="authModal">
+    <div class="modal-card auth-modal-card">
+      <div class="auth-tabs">
+        <div class="auth-tab active" id="tabLogin" onclick="switchAuthTab('login')">登录</div>
+        <div class="auth-tab" id="tabRegister" onclick="switchAuthTab('register')">注册</div>
+      </div>
+
+      <!-- 登录表单 -->
+      <div class="auth-form" id="loginForm">
+        <div class="modal-title">🔐 用户登录</div>
+        <div class="auth-input-group">
+          <input class="modal-input auth-input" id="loginEmail" type="email" placeholder="邮箱地址" autocomplete="email">
+        </div>
+        <div class="auth-input-group">
+          <input class="modal-input auth-input" id="loginPassword" type="password" placeholder="密码" autocomplete="current-password">
+        </div>
+        <div class="modal-hint" id="loginHint"></div>
+        <button class="modal-btn modal-confirm auth-submit-btn" onclick="handleLogin()">登录</button>
+      </div>
+
+      <!-- 注册表单 -->
+      <div class="auth-form" id="registerForm" style="display:none">
+        <div class="modal-title">📝 用户注册</div>
+        <div class="auth-input-group">
+          <input class="modal-input auth-input" id="regEmail" type="email" placeholder="邮箱地址" autocomplete="email">
+        </div>
+        <div class="auth-input-group">
+          <input class="modal-input auth-input" id="regPassword" type="password" placeholder="密码（至少6位）" autocomplete="new-password">
+        </div>
+        <div class="auth-input-group">
+          <input class="modal-input auth-input" id="regConfirmPassword" type="password" placeholder="确认密码" autocomplete="new-password">
+        </div>
+        <div class="auth-input-group">
+          <input class="modal-input auth-input" id="regUsername" type="text" maxlength="7" placeholder="用户名（最多7字）" autocomplete="username">
+        </div>
+        <div class="modal-hint" id="regHint"></div>
+        <button class="modal-btn modal-confirm auth-submit-btn" onclick="handleRegister()">注册</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 说明 -->
   <div class="rules-card">
     <div class="rule"><span class="rule-ico">📋</span> 任务全队可见，放在桌面互相监督</div>
@@ -160,6 +213,7 @@
 </div>
 
 <script src="js/config.js"></script>
+<script src="js/auth.js"></script>
 <script src="js/tasks.js"></script>
 <script src="js/app.js"></script>
 </body>

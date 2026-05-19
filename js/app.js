@@ -14,6 +14,7 @@
   const MAX_PLAYERS = _cfg.game?.maxPlayers || 4;
   const HAS_GIST = !!GIST_ID;
   const STORAGE_PREFIX = 'pea_';
+  const AUTH_REQUIRED = _cfg.auth?.required !== false; // 默认需要认证
 
   // ─── 状态 ─────────────────────────────────────────────────
   let sel = null;          // 当前选中的编号
@@ -23,15 +24,50 @@
   let timerInterval = null;
   let pubTs = null, secTs = null;
   let activeFilter = 'all';
-  let favorites = JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'favs') || '[]');
-  let history = JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'history') || '[]');
-  let customTasks = JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'custom') || '[]');
+  let favorites = [];
+  let history = [];
+  let customTasks = [];
   // 用户名映射 { 1: "小明", 2: "小红", ... } — 存 localStorage + globalData
-  let userNames = JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'names') || '{}');
+  let userNames = {};
+  let isInitialized = false;
 
   // ─── 工具函数 ──────────────────────────────────────────────
   function saveLocal(key, data) {
     localStorage.setItem(STORAGE_PREFIX + key, JSON.stringify(data));
+  }
+
+  // 从认证模块加载用户数据
+  function loadUserData() {
+    if (!AuthAPI || !AuthAPI.isLoggedIn()) {
+      favorites = JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'favs') || '[]');
+      history = JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'history') || '[]');
+      customTasks = JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'custom') || '[]');
+      userNames = JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'names') || '{}');
+      return;
+    }
+
+    favorites = AuthAPI.getUserData('favorites') || [];
+    history = AuthAPI.getUserData('history') || [];
+    customTasks = AuthAPI.getUserData('customTasks') || [];
+    userNames = AuthAPI.getUserData('userNames') || {};
+    myNum = AuthAPI.getUserData('myNum');
+  }
+
+  // 保存用户数据到认证模块
+  function saveUserData() {
+    if (!AuthAPI || !AuthAPI.isLoggedIn()) {
+      saveLocal('favs', favorites);
+      saveLocal('history', history);
+      saveLocal('custom', customTasks);
+      saveLocal('names', userNames);
+      return;
+    }
+
+    AuthAPI.setUserData('favorites', favorites);
+    AuthAPI.setUserData('history', history);
+    AuthAPI.setUserData('customTasks', customTasks);
+    AuthAPI.setUserData('userNames', userNames);
+    if (myNum) AuthAPI.setUserData('myNum', myNum);
   }
 
   function fmt(ms) {
@@ -137,7 +173,7 @@
     const idx = favorites.indexOf(taskText);
     if (idx >= 0) favorites.splice(idx, 1);
     else favorites.push(taskText);
-    saveLocal('favs', favorites);
+    saveUserData();
   }
 
   function isFavorite(taskText) {
@@ -147,19 +183,19 @@
   function addHistory(icon, text, label) {
     history.unshift({ icon, text, label, ts: Date.now() });
     if (history.length > 50) history = history.slice(0, 50);
-    saveLocal('history', history);
+    saveUserData();
   }
 
   function addCustomTask(text) {
     const task = { icon: '✨', text, label: '自定义任务' };
     customTasks.push(task);
-    saveLocal('custom', customTasks);
+    saveUserData();
     return task;
   }
 
   function removeCustomTask(index) {
     customTasks.splice(index, 1);
-    saveLocal('custom', customTasks);
+    saveUserData();
   }
 
   // ─── 分享功能 ──────────────────────────────────────────────
@@ -565,12 +601,14 @@
 
     // 保存用户名
     userNames[pendingNum] = name;
-    localStorage.setItem(STORAGE_PREFIX + 'names', JSON.stringify(userNames));
 
     // 同步到 globalData
     if (!globalData[pendingNum]) globalData[pendingNum] = {};
     globalData[pendingNum].name = name;
     saveGlobal(globalData);
+
+    // 保存用户数据
+    saveUserData();
 
     const n = pendingNum;
     hideNameModal();
@@ -578,7 +616,6 @@
     // 完成选号流程
     sel = n;
     myNum = n;
-    localStorage.setItem(STORAGE_PREFIX + 'my_num', n);
     refreshNums();
     updateUI();
     showToast(name + '，欢迎！');
@@ -619,7 +656,7 @@
 
     sel = n;
     myNum = n;
-    localStorage.setItem(STORAGE_PREFIX + 'my_num', n);
+    saveUserData();
     refreshNums();
     updateUI();
   };
@@ -639,7 +676,7 @@
     // 先立即更新本地 UI，再异步保存（避免等待网络导致的闪烁）
     if (!myNum) {
       myNum = sel;
-      localStorage.setItem(STORAGE_PREFIX + 'my_num', sel);
+      saveUserData();
     }
 
     const ev = pool[idx];
@@ -671,7 +708,7 @@
 
     if (!myNum) {
       myNum = sel;
-      localStorage.setItem(STORAGE_PREFIX + 'my_num', sel);
+      saveUserData();
     }
 
     const ev = pool[idx];
@@ -724,7 +761,22 @@
   async function init() {
     updateSyncUI('syncing', HAS_GIST ? '同步中...' : '本地模式');
 
-    const savedMyNum = localStorage.getItem(STORAGE_PREFIX + 'my_num');
+    // 检查认证
+    if (AUTH_REQUIRED && typeof AuthAPI !== 'undefined') {
+      if (!AuthAPI.isLoggedIn()) {
+        // 未登录，显示登录弹窗
+        showAuthModal();
+        return;
+      } else {
+        // 已登录，更新UI
+        updateAuthUI();
+      }
+    }
+
+    // 加载用户数据
+    loadUserData();
+
+    const savedMyNum = myNum;
     if (savedMyNum) myNum = parseInt(savedMyNum);
 
     if (HAS_GIST) {
@@ -749,13 +801,14 @@
         userNames[i] = globalData[i].name;
       }
     }
-    localStorage.setItem(STORAGE_PREFIX + 'names', JSON.stringify(userNames));
+    saveUserData();
 
     renderFilters();
     renderCustomTasks();
 
     refreshNums();
     updateUI();
+    isInitialized = true;
 
     // 如果已选编号但还没绑用户名，补弹窗
     if (sel !== null && !getUserName(sel)) {
@@ -776,7 +829,7 @@
               nameChanged = true;
             }
           }
-          if (nameChanged) localStorage.setItem(STORAGE_PREFIX + 'names', JSON.stringify(userNames));
+          if (nameChanged) saveUserData();
           updateSyncUI('ok', '已同步');
           refreshNums();
           updateUI();
@@ -786,6 +839,164 @@
       }, POLL_MS);
     }
   }
+
+  // 显示认证弹窗
+  function showAuthModal() {
+    const modal = document.getElementById('authModal');
+    if (modal) {
+      modal.classList.add('show');
+    }
+  }
+
+  // 隐藏认证弹窗
+  function hideAuthModal() {
+    const modal = document.getElementById('authModal');
+    if (modal) {
+      modal.classList.remove('show');
+    }
+  }
+
+  // 更新认证UI
+  function updateAuthUI() {
+    if (!AuthAPI || !AuthAPI.isLoggedIn()) return;
+
+    const user = AuthAPI.getCurrentUser();
+    const authBar = document.getElementById('authBar');
+    const authUsername = document.getElementById('authUsername');
+
+    if (authBar && authUsername && user) {
+      authBar.style.display = 'flex';
+      authUsername.textContent = user.username;
+    }
+  }
+
+  // 切换认证标签
+  window.switchAuthTab = function(tab) {
+    const tabLogin = document.getElementById('tabLogin');
+    const tabRegister = document.getElementById('tabRegister');
+    const loginForm = document.getElementById('loginForm');
+    const registerForm = document.getElementById('registerForm');
+
+    if (tab === 'login') {
+      tabLogin.classList.add('active');
+      tabRegister.classList.remove('active');
+      loginForm.style.display = 'block';
+      registerForm.style.display = 'none';
+    } else {
+      tabRegister.classList.add('active');
+      tabLogin.classList.remove('active');
+      registerForm.style.display = 'block';
+      loginForm.style.display = 'none';
+    }
+  };
+
+  // 处理登录
+  window.handleLogin = function() {
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    const hint = document.getElementById('loginHint');
+
+    if (!email || !password) {
+      hint.textContent = '请填写邮箱和密码';
+      return;
+    }
+
+    const result = AuthAPI.login(email, password);
+
+    if (result.success) {
+      hint.textContent = '';
+      hideAuthModal();
+      updateAuthUI();
+      loadUserData();
+
+      // 重新初始化
+      if (!isInitialized) {
+        init();
+      } else {
+        refreshNums();
+        updateUI();
+      }
+
+      showToast('欢迎回来，' + result.user.username + '！');
+    } else {
+      hint.textContent = result.message;
+    }
+  };
+
+  // 处理注册
+  window.handleRegister = function() {
+    const email = document.getElementById('regEmail').value.trim();
+    const password = document.getElementById('regPassword').value;
+    const confirmPassword = document.getElementById('regConfirmPassword').value;
+    const username = document.getElementById('regUsername').value.trim();
+    const hint = document.getElementById('regHint');
+
+    if (!email || !password || !confirmPassword || !username) {
+      hint.textContent = '请填写所有字段';
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      hint.textContent = '两次密码输入不一致';
+      return;
+    }
+
+    const result = AuthAPI.register(email, password, username);
+
+    if (result.success) {
+      hint.textContent = '';
+      // 注册成功后自动登录
+      const loginResult = AuthAPI.login(email, password);
+      if (loginResult.success) {
+        hideAuthModal();
+        updateAuthUI();
+        loadUserData();
+
+        // 重新初始化
+        if (!isInitialized) {
+          init();
+        } else {
+          refreshNums();
+          updateUI();
+        }
+
+        showToast('注册成功，欢迎 ' + username + '！');
+      }
+    } else {
+      hint.textContent = result.message;
+    }
+  };
+
+  // 处理登出
+  window.handleLogout = function() {
+    if (!AuthAPI) return;
+
+    if (confirm('确定要退出登录吗？')) {
+      AuthAPI.logout();
+      location.reload(); // 刷新页面重新初始化
+    }
+  };
+
+  // 回车键处理
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      const authModal = document.getElementById('authModal');
+      const nameModal = document.getElementById('nameModal');
+
+      if (authModal && authModal.classList.contains('show')) {
+        e.preventDefault();
+        const loginForm = document.getElementById('loginForm');
+        if (loginForm.style.display !== 'none') {
+          window.handleLogin();
+        } else {
+          window.handleRegister();
+        }
+      } else if (nameModal && nameModal.classList.contains('show')) {
+        e.preventDefault();
+        window.confirmName();
+      }
+    }
+  });
 
   init();
 })();

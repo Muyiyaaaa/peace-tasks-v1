@@ -588,3 +588,184 @@ body{
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
 ::-webkit-scrollbar-thumb:hover{background:#cbd5e1}
+
+/* ═══════════════════════════════════════════════
+   用户认证样式
+   ═══════════════════════════════════════════════ */
+
+/* 登录状态栏 */
+.auth-bar{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:12px 16px;
+  margin-bottom:16px;
+  border-radius:var(--radius-sm);
+  background:linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border:1.5px solid #bae6fd;
+}
+.auth-user-info{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  font-size:14px;
+  font-weight:600;
+  color:var(--text-primary);
+}
+.auth-avatar{
+  font-size:20px;
+}
+.auth-username{
+  color:var(--accent-blue);
+}
+.auth-actions{
+  display:flex;
+  gap:8px;
+}
+.auth-btn{
+  padding:6px 14px;
+  border-radius:var(--radius-xs);
+  font-size:12px;
+  font-weight:600;
+  cursor:pointer;
+  border:1.5px solid var(--border);
+  background:var(--surface);
+  color:var(--text-secondary);
+  transition:all .15s;
+}
+.auth-btn:hover{
+  border-color:var(--accent-red);
+  color:var(--accent-red);
+  background:var(--accent-red-light);
+}
+.auth-btn-logout{
+  border-color:var(--accent-red);
+  color:var(--accent-red);
+}
+.auth-btn-logout:hover{
+  background:var(--accent-red);
+  color:#fff;
+}
+
+/* 认证弹窗 */
+.auth-modal-card{
+  max-width:380px;
+  padding:0;
+  overflow:hidden;
+}
+
+/* 标签页 */
+.auth-tabs{
+  display:flex;
+  background:var(--surface-hover);
+  border-bottom:1.5px solid var(--border);
+}
+.auth-tab{
+  flex:1;
+  padding:14px;
+  text-align:center;
+  font-size:14px;
+  font-weight:700;
+  cursor:pointer;
+  color:var(--text-muted);
+  transition:all .2s;
+  border-bottom:2px solid transparent;
+}
+.auth-tab:hover{
+  color:var(--text-secondary);
+  background:rgba(79,110,247,.05);
+}
+.auth-tab.active{
+  color:var(--accent-blue);
+  border-bottom-color:var(--accent-blue);
+  background:var(--surface);
+}
+
+/* 表单 */
+.auth-form{
+  padding:24px;
+}
+.auth-input-group{
+  margin-bottom:16px;
+}
+.auth-input{
+  width:100%;
+  padding:12px 14px;
+  border-radius:var(--radius-xs);
+  border:2px solid var(--border);
+  font-size:14px;
+  color:var(--text-primary);
+  background:var(--surface-hover);
+  outline:none;
+  transition:border-color .2s;
+}
+.auth-input:focus{
+  border-color:var(--accent-blue);
+}
+.auth-input::placeholder{
+  color:var(--text-muted);
+  font-weight:400;
+}
+.auth-submit-btn{
+  width:100%;
+  margin-top:8px;
+  padding:12px;
+  font-size:14px;
+}
+
+/* 未登录遮罩 */
+.auth-lock-overlay{
+  position:fixed;
+  inset:0;
+  background:rgba(26,31,54,.6);
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index:9998;
+}
+.auth-lock-card{
+  background:var(--surface);
+  border-radius:var(--radius);
+  padding:40px 32px;
+  text-align:center;
+  box-shadow:var(--shadow-lg);
+  max-width:360px;
+  width:90%;
+}
+.auth-lock-icon{
+  font-size:64px;
+  margin-bottom:16px;
+  animation:float 3s ease-in-out infinite;
+}
+.auth-lock-title{
+  font-size:22px;
+  font-weight:800;
+  color:var(--text-primary);
+  margin-bottom:8px;
+}
+.auth-lock-desc{
+  font-size:14px;
+  color:var(--text-secondary);
+  margin-bottom:24px;
+  line-height:1.6;
+}
+.auth-lock-btn{
+  width:100%;
+  padding:14px;
+  border-radius:var(--radius-sm);
+  font-size:15px;
+  font-weight:700;
+  cursor:pointer;
+  border:none;
+  background:var(--accent-blue);
+  color:#fff;
+  box-shadow:0 4px 12px rgba(79,110,247,.25);
+  transition:all .2s;
+}
+.auth-lock-btn:hover{
+  transform:translateY(-2px);
+  box-shadow:0 6px 18px rgba(79,110,247,.35);
+}
+
