@@ -607,6 +607,22 @@
     showToast('自定义任务已添加');
   };
 
+  // ─── 数据加载保障 ──────────────────────────────────────────
+  /** 检查 globalData 是否已加载，未加载时从数据源重新读取 */
+  async function ensureGlobalData() {
+    if (Object.keys(globalData).length > 0) return;
+    if (HAS_GIST) {
+      const data = await fetchGlobal();
+      if (data) {
+        globalData = data;
+        saveLocal('globalData', data);
+        updateSyncUI('ok', '已同步');
+      }
+    } else {
+      globalData = JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'globalData') || '{}');
+    }
+  }
+
   // ─── 初始化 ─────────────────────────────────────────────────
   async function init() {
     try {
@@ -738,7 +754,7 @@
   };
 
   // 处理登录
-  window.handleLogin = function() {
+  window.handleLogin = async function() {
     const email = document.getElementById('loginEmail').value.trim();
     const password = document.getElementById('loginPassword').value;
     const hint = document.getElementById('loginHint');
@@ -764,6 +780,8 @@
       if (!isInitialized) {
         init();
       } else {
+        // 确保 globalData 已加载（修复竞态：init 中 isInitialized 先于 Gist 数据加载完成）
+        await ensureGlobalData();
         updateUI();
       }
 
@@ -774,7 +792,7 @@
   };
 
   // 处理注册
-  window.handleRegister = function() {
+  window.handleRegister = async function() {
     const email = document.getElementById('regEmail').value.trim();
     const password = document.getElementById('regPassword').value;
     const confirmPassword = document.getElementById('regConfirmPassword').value;
@@ -812,6 +830,8 @@
         if (!isInitialized) {
           init();
         } else {
+          // 确保 globalData 已加载（修复竞态：init 中 isInitialized 先于 Gist 数据加载完成）
+          await ensureGlobalData();
           updateUI();
         }
 
