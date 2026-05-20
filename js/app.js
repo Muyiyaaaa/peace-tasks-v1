@@ -394,12 +394,11 @@
     const currentEmail = currentUser ? currentUser.email : null;
 
     Object.keys(globalData).forEach(email => {
-      // 跳过认证模块写入的内部数据（_users, _userData）
-      if (email.startsWith('_')) return;
+      // 跳过内部数据键（_users, _userData）和当前用户自己
+      if (email.startsWith('_') || email === currentEmail) return;
       const d = globalData[email];
-      const isMine = email === currentEmail;
       const card = document.createElement('div');
-      card.className = 'status-card' + (isMine ? ' my' : '');
+      card.className = 'status-card';
 
       // 头像
       const avatar = document.createElement('div');
@@ -438,12 +437,7 @@
       if (hasSec) {
         const row = document.createElement('div');
         row.className = 'status-row';
-        if (isMine) {
-          const ev = EVENTS[d.sec.idx % EVENTS.length];
-          row.innerHTML = `<span class="t-type sec">隐藏</span><span class="t-text">${ev ? ev.text : '(已领取)'}</span><span class="t-time">${fmtTime(d.sec.ts)}</span>`;
-        } else {
-          row.innerHTML = `<span class="t-type sec">隐藏</span><span class="t-text">🔒 已领取</span><span class="t-time">${fmtTime(d.sec.ts)}</span>`;
-        }
+        row.innerHTML = `<span class="t-type sec">隐藏</span><span class="t-text">🔒 已领取</span><span class="t-time">${fmtTime(d.sec.ts)}</span>`;
         list.appendChild(row);
       }
 

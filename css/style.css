@@ -170,7 +170,7 @@ body{
 }
 .status-row .t-type.pub{background:var(--accent-green-light);color:var(--accent-green)}
 .status-row .t-type.sec{background:var(--accent-purple-light);color:var(--accent-purple)}
-.status-row .t-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.status-row .t-text{overflow:visible;white-space:normal;word-break:break-word;flex:1;line-height:1.4}
 .status-row .t-time{font-size:10px;color:var(--text-muted);font-weight:500;flex-shrink:0;white-space:nowrap;font-variant-numeric:tabular-nums;margin-left:6px}
 .status-empty{font-size:12px;color:var(--text-muted);font-style:italic;padding:4px 8px}
 
