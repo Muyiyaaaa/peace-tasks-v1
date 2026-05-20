@@ -24,6 +24,7 @@
   let history = [];
   let customTasks = [];
   let isInitialized = false;
+  let _saveQueue = Promise.resolve(); // 串行化保存队列
 
   // ─── 工具函数 ──────────────────────────────────────────────
   function saveLocal(key, data) {
@@ -111,36 +112,45 @@
     }
   }
 
-  async function saveGlobal(data) {
-    if (!HAS_GIST || !GIST_PAT) {
-      saveLocal('globalData', data);
-      return;
-    }
-    try {
-      // 合并当前 Gist 数据，避免覆盖 auth 数据（_users, _userData）
-      const currentData = await fetchGlobal();
-      const merged = { ...(currentData || {}), ...data };
-      // 确保 auth 数据不被覆盖
-      if (currentData) {
-        if (currentData._users && !data._users) merged._users = currentData._users;
-        if (currentData._userData && !data._userData) merged._userData = currentData._userData;
-      }
+  async function saveGlobal() {
+    // 等待上一次保存完成，避免并发 fetch-then-PATCH 覆盖
+    await _saveQueue.catch(() => {});
 
-      const body = JSON.stringify({
-        files: { [GIST_FILE]: { content: JSON.stringify(merged) } }
-      });
-      await fetchWithTimeout(`https://api.github.com/gists/${GIST_ID}`, {
-        method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${GIST_PAT}`,
-          'Content-Type': 'application/json'
-        },
-        body
-      });
-    } catch (e) {
-      console.warn('Gist save error:', e);
-      saveLocal('globalData', data);
-    }
+    const task = (async () => {
+      const data = globalData; // 执行时重新读取最新数据
+      if (!HAS_GIST || !GIST_PAT) {
+        saveLocal('globalData', data);
+        return;
+      }
+      try {
+        // 合并当前 Gist 数据，避免覆盖 auth 数据（_users, _userData）
+        const currentData = await fetchGlobal();
+        const merged = { ...(currentData || {}), ...data };
+        // 确保 auth 数据不被覆盖
+        if (currentData) {
+          if (currentData._users && !data._users) merged._users = currentData._users;
+          if (currentData._userData && !data._userData) merged._userData = currentData._userData;
+        }
+
+        const body = JSON.stringify({
+          files: { [GIST_FILE]: { content: JSON.stringify(merged) } }
+        });
+        await fetchWithTimeout(`https://api.github.com/gists/${GIST_ID}`, {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${GIST_PAT}`,
+            'Content-Type': 'application/json'
+          },
+          body
+        });
+      } catch (e) {
+        console.warn('Gist save error:', e);
+        saveLocal('globalData', data);
+      }
+    })();
+
+    _saveQueue = task;
+    return task;
   }
 
   // ─── 任务获取 ──────────────────────────────────────────────
@@ -233,8 +243,8 @@
       const ev = EVENTS[pub.idx % EVENTS.length];
       showPublicTask(ev);
       pubTs = pub.ts;
-      document.getElementById('publicBtn').textContent = '换一个';
-      document.getElementById('publicBtn').disabled = false;
+      document.getElementById('publicBtn').textContent = '领取任务';
+      document.getElementById('publicBtn').disabled = true;
     } else {
       showPublicEmpty();
       pubTs = null;
@@ -249,8 +259,8 @@
       const ev = EVENTS[sec.idx % EVENTS.length];
       showSecretTask(ev, true);
       secTs = sec.ts;
-      document.getElementById('secretBtn').textContent = '换一个';
-      document.getElementById('secretBtn').disabled = false;
+      document.getElementById('secretBtn').textContent = '领取隐藏';
+      document.getElementById('secretBtn').disabled = true;
     } else {
       showSecretEmpty();
       secTs = null;
@@ -346,6 +356,10 @@
         return;
       }
 
+      // 单个任务过期时更新对应卡片（使按钮恢复可用）
+      if (!pub) updatePublicCard();
+      if (!sec) updateSecretCard();
+
       if (pub) {
         const rem = Math.max(0, LOCK_MS - (Date.now() - pub.ts));
         document.getElementById('timerFill').style.width = (rem / LOCK_MS * 100) + '%';
@@ -380,6 +394,8 @@
     const currentEmail = currentUser ? currentUser.email : null;
 
     Object.keys(globalData).forEach(email => {
+      // 跳过认证模块写入的内部数据（_users, _userData）
+      if (email.startsWith('_')) return;
       const d = globalData[email];
       const isMine = email === currentEmail;
       const card = document.createElement('div');
@@ -533,7 +549,7 @@
     document.getElementById('timerSection').classList.add('on');
     startTimer();
 
-    saveGlobal(globalData);
+    await saveGlobal();
   };
 
   window.claimSecret = async function() {
@@ -560,7 +576,7 @@
     document.getElementById('timerSection').classList.add('on');
     startTimer();
 
-    saveGlobal(globalData);
+    await saveGlobal();
   };
 
   window.revealSecret = function() {
@@ -646,7 +662,17 @@
       setInterval(async () => {
         const data = await fetchGlobal();
         if (data !== null) {
-          globalData = data;
+          // 合并远端数据：保留当前用户的本地状态（本地始终为最新）
+          if (AuthAPI && AuthAPI.isLoggedIn()) {
+            const email = AuthAPI.getCurrentUser().email;
+            const myLocalData = globalData[email];
+            globalData = data;
+            if (myLocalData) {
+              globalData[email] = myLocalData;
+            }
+          } else {
+            globalData = data;
+          }
           updateSyncUI('ok', '已同步');
           updateUI();
         } else {
