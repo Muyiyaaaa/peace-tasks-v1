@@ -189,7 +189,7 @@
             'Content-Type': 'application/json'
           },
           body
-        });
+        }, 30000); // 30秒超时，防止网络慢时 PATCH 请求中断
 
         console.log('[saveGlobal] Gist 响应状态:', response.status);
 
