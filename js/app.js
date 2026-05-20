@@ -118,8 +118,11 @@
 
     const task = (async () => {
       const data = globalData; // 执行时重新读取最新数据
+
+      // 始终缓存到 localStorage，防止页面刷新后 Gist 不可用时丢失任务状态
+      saveLocal('globalData', data);
+
       if (!HAS_GIST || !GIST_PAT) {
-        saveLocal('globalData', data);
         return;
       }
       try {
@@ -145,7 +148,6 @@
         });
       } catch (e) {
         console.warn('Gist save error:', e);
-        saveLocal('globalData', data);
       }
     })();
 
@@ -639,6 +641,8 @@
         globalData = JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'globalData') || '{}');
       } else {
         globalData = data;
+        // Gist 同步成功后更新本地缓存，确保下次页面加载有回退数据
+        saveLocal('globalData', data);
         updateSyncUI('ok', '已同步');
       }
     } else {
