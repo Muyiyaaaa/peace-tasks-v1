@@ -610,16 +610,55 @@
   // ─── 数据加载保障 ──────────────────────────────────────────
   /** 检查 globalData 是否已加载，未加载时从数据源重新读取 */
   async function ensureGlobalData() {
-    if (Object.keys(globalData).length > 0) return;
-    if (HAS_GIST) {
-      const data = await fetchGlobal();
-      if (data) {
-        globalData = data;
-        saveLocal('globalData', data);
-        updateSyncUI('ok', '已同步');
+    // 如果已登录，先保存当前用户的本地任务状态（防止被远端旧数据覆盖）
+    let myLocalData = null;
+    if (AuthAPI && AuthAPI.isLoggedIn()) {
+      const email = AuthAPI.getCurrentUser().email;
+      if (globalData[email]) {
+        myLocalData = globalData[email];
+      }
+    }
+
+    if (Object.keys(globalData).length === 0 || !AuthAPI || !AuthAPI.isLoggedIn()) {
+      // globalData 为空，或未登录状态，从数据源加载
+      if (HAS_GIST) {
+        const data = await fetchGlobal();
+        if (data) {
+          globalData = data;
+          saveLocal('globalData', data);
+          updateSyncUI('ok', '已同步');
+        }
+      } else {
+        globalData = JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'globalData') || '{}');
       }
     } else {
-      globalData = JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'globalData') || '{}');
+      // globalData 已有数据且已登录，从 Gist 刷新以确保最新
+      if (HAS_GIST) {
+        const data = await fetchGlobal();
+        if (data) {
+          // 合并远端数据，但优先保留当前用户的本地任务状态
+          const email = AuthAPI.getCurrentUser().email;
+          const myData = myLocalData || globalData[email];
+          globalData = data;
+          if (myData) {
+            globalData[email] = myData;
+          }
+          saveLocal('globalData', globalData);
+          updateSyncUI('ok', '已同步');
+        }
+      }
+    }
+
+    // 恢复当前用户的本地任务状态（如果之前保存了）
+    if (myLocalData && AuthAPI && AuthAPI.isLoggedIn()) {
+      const email = AuthAPI.getCurrentUser().email;
+      // 如果远端数据过期（本地更新），使用本地数据
+      if (globalData[email] && myLocalData.pub && myLocalData.pub.ts > (globalData[email].pub?.ts || 0)) {
+        globalData[email].pub = myLocalData.pub;
+      }
+      if (globalData[email] && myLocalData.sec && myLocalData.sec.ts > (globalData[email].sec?.ts || 0)) {
+        globalData[email].sec = myLocalData.sec;
+      }
     }
   }
 
@@ -776,14 +815,9 @@
       document.getElementById('loginEmail').value = '';
       document.getElementById('loginPassword').value = '';
 
-      // 重新初始化
-      if (!isInitialized) {
-        init();
-      } else {
-        // 确保 globalData 已加载（修复竞态：init 中 isInitialized 先于 Gist 数据加载完成）
-        await ensureGlobalData();
-        updateUI();
-      }
+      // 确保 globalData 已加载（修复重新登录数据丢失问题）
+      await ensureGlobalData();
+      updateUI();
 
       showToast('欢迎回来，' + result.user.username + '！');
     } else {
@@ -826,14 +860,9 @@
         document.getElementById('regConfirmPassword').value = '';
         document.getElementById('regUsername').value = '';
 
-        // 重新初始化
-        if (!isInitialized) {
-          init();
-        } else {
-          // 确保 globalData 已加载（修复竞态：init 中 isInitialized 先于 Gist 数据加载完成）
-          await ensureGlobalData();
-          updateUI();
-        }
+        // 确保 globalData 已加载（修复重新登录数据丢失问题）
+        await ensureGlobalData();
+        updateUI();
 
         showToast('注册成功，欢迎 ' + username + '！');
       }
