@@ -322,12 +322,14 @@
   // 保存记住的凭据
   function saveRememberedCredentials(email, password) {
     try {
+      console.log('[saveRememberedCredentials] 保存凭据, email:', email, 'password length:', password.length);
       const credentials = {
         email: email,
-        password: password, // 已哈希的密码
+        password: password,
         timestamp: Date.now()
       };
       localStorage.setItem(REMEMBERED_CREDENTIALS_KEY, JSON.stringify(credentials));
+      console.log('[saveRememberedCredentials] 保存成功');
     } catch (e) {
       console.warn('Failed to save remembered credentials:', e);
     }
@@ -337,8 +339,11 @@
   function getRememberedCredentials() {
     try {
       const data = localStorage.getItem(REMEMBERED_CREDENTIALS_KEY);
+      console.log('[getRememberedCredentials] localStorage 数据:', data);
       if (!data) return null;
-      return JSON.parse(data);
+      const parsed = JSON.parse(data);
+      console.log('[getRememberedCredentials] 解析成功:', parsed);
+      return parsed;
     } catch (e) {
       console.warn('Failed to get remembered credentials:', e);
       return null;

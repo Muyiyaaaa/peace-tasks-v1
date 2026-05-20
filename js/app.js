@@ -893,6 +893,30 @@
     }
   }
 
+  // 自动填充记住的凭据
+  function fillRememberedCredentials() {
+    console.log('[fillRememberedCredentials] 开始执行');
+    if (!AuthAPI || !AuthAPI.getRememberedCredentials) {
+      console.log('[fillRememberedCredentials] AuthAPI 不可用');
+      return;
+    }
+
+    const credentials = AuthAPI.getRememberedCredentials();
+    console.log('[fillRememberedCredentials] 获取到的凭据:', credentials);
+    if (credentials) {
+      const emailInput = document.getElementById('loginEmail');
+      const passwordInput = document.getElementById('loginPassword');
+      const rememberCheckbox = document.getElementById('loginRemember');
+
+      if (emailInput) emailInput.value = credentials.email || '';
+      if (passwordInput) passwordInput.value = credentials.password || '';
+      if (rememberCheckbox) rememberCheckbox.checked = true;
+      console.log('[fillRememberedCredentials] 凭据已填充到表单');
+    } else {
+      console.log('[fillRememberedCredentials] 没有已保存的凭据');
+    }
+  }
+
   // 更新认证UI
   function updateAuthUI() {
     if (!AuthAPI || !AuthAPI.isLoggedIn()) return;
@@ -904,22 +928,6 @@
     if (authBar && authUsername && user) {
       authBar.style.display = 'flex';
       authUsername.textContent = user.username;
-    }
-  }
-
-  // 自动填充记住的凭据
-  function fillRememberedCredentials() {
-    if (!AuthAPI || !AuthAPI.getRememberedCredentials) return;
-
-    const credentials = AuthAPI.getRememberedCredentials();
-    if (credentials) {
-      const emailInput = document.getElementById('loginEmail');
-      const passwordInput = document.getElementById('loginPassword');
-      const rememberCheckbox = document.getElementById('loginRemember');
-
-      if (emailInput) emailInput.value = credentials.email || '';
-      if (passwordInput) passwordInput.value = credentials.password || '';
-      if (rememberCheckbox) rememberCheckbox.checked = true;
     }
   }
 
@@ -965,8 +973,10 @@
 
       // 保存或清除记住的凭据
       if (remember) {
+        console.log('[handleLogin] 保存记住的凭据, email:', email);
         AuthAPI.saveRememberedCredentials(email, result.rawPassword);
       } else {
+        console.log('[handleLogin] 清除记住的凭据');
         AuthAPI.clearRememberedCredentials();
       }
 
