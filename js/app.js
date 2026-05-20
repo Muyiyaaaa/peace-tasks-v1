@@ -764,11 +764,14 @@
 
     // 立即判断登录状态，弹窗和同步不再互相阻塞
     const loggedIn = typeof AuthAPI !== 'undefined' && AuthAPI.isLoggedIn();
+    console.log('[init] AUTH_REQUIRED:', AUTH_REQUIRED, 'loggedIn:', loggedIn);
     if (AUTH_REQUIRED && !loggedIn) {
+      console.log('[init] 未登录,显示弹窗并尝试填充凭据');
       showAuthModal();
       // 自动填充记住的凭据
       fillRememberedCredentials();
     } else if (loggedIn) {
+      console.log('[init] 已登录,跳过填充');
       updateAuthUI();
       loadUserData();
     }
@@ -953,9 +956,11 @@
 
   // 处理登录
   window.handleLogin = async function() {
+    console.log('[handleLogin] 登录函数被调用');
     const email = document.getElementById('loginEmail').value.trim();
     const password = document.getElementById('loginPassword').value;
     const remember = document.getElementById('loginRemember').checked;
+    console.log('[handleLogin] email:', email, 'remember:', remember);
     const hint = document.getElementById('loginHint');
 
     if (!email || !password) {
@@ -964,6 +969,7 @@
     }
 
     const result = AuthAPI.login(email, password);
+    console.log('[handleLogin] 登录结果:', result);
 
     if (result.success) {
       hint.textContent = '';
@@ -972,11 +978,12 @@
       loadUserData();
 
       // 保存或清除记住的凭据
+      console.log('[handleLogin] remember复选框状态:', remember);
       if (remember) {
         console.log('[handleLogin] 保存记住的凭据, email:', email);
         AuthAPI.saveRememberedCredentials(email, result.rawPassword);
       } else {
-        console.log('[handleLogin] 清除记住的凭据');
+        console.log('[handleLogin] 未勾选记住,清除记住的凭据');
         AuthAPI.clearRememberedCredentials();
       }
 
