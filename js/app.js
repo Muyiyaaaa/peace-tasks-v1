@@ -133,6 +133,29 @@
         if (currentData) {
           if (currentData._users && !data._users) merged._users = currentData._users;
           if (currentData._userData && !data._userData) merged._userData = currentData._userData;
+
+          // 合并其他用户的任务数据（取时间戳最新的）
+          Object.keys(currentData).forEach(email => {
+            if (email.startsWith('_')) return;
+            if (!data[email] && currentData[email]) {
+              // 本地没有该用户，使用远端数据
+              merged[email] = currentData[email];
+            } else if (data[email] && currentData[email]) {
+              // 两边都有，比较时间戳
+              const local = data[email];
+              const remote = currentData[email];
+              if (remote.pub && (!local.pub || remote.pub.ts > local.pub.ts)) {
+                merged[email].pub = remote.pub;
+              }
+              if (remote.sec && (!local.sec || remote.sec.ts > local.sec.ts)) {
+                merged[email].sec = remote.sec;
+              }
+              // 保留用户名
+              if (remote.username && !local.username) {
+                merged[email].username = remote.username;
+              }
+            }
+          });
         }
 
         const body = JSON.stringify({
@@ -615,9 +638,17 @@
     if (AuthAPI && AuthAPI.isLoggedIn()) {
       const email = AuthAPI.getCurrentUser().email;
       if (globalData[email]) {
-        myLocalData = globalData[email];
+        myLocalData = JSON.parse(JSON.stringify(globalData[email])); // 深拷贝
       }
     }
+
+    // 保存所有用户的本地最新数据（用于合并时保护）
+    const allLocalData = {};
+    Object.keys(globalData).forEach(email => {
+      if (!email.startsWith('_') && globalData[email]) {
+        allLocalData[email] = JSON.parse(JSON.stringify(globalData[email]));
+      }
+    });
 
     if (Object.keys(globalData).length === 0 || !AuthAPI || !AuthAPI.isLoggedIn()) {
       // globalData 为空，或未登录状态，从数据源加载
@@ -636,28 +667,54 @@
       if (HAS_GIST) {
         const data = await fetchGlobal();
         if (data) {
-          // 合并远端数据，但优先保留当前用户的本地任务状态
+          // 合并远端数据，但优先保留本地最新的任务状态
           const email = AuthAPI.getCurrentUser().email;
-          const myData = myLocalData || globalData[email];
+
+          // 先使用远端数据
           globalData = data;
-          if (myData) {
-            globalData[email] = myData;
+
+          // 合并所有用户的本地数据（取时间戳最新的）
+          Object.keys(allLocalData).forEach(uEmail => {
+            const local = allLocalData[uEmail];
+            const remote = globalData[uEmail];
+
+            if (!remote) {
+              // 远端没有该用户，使用本地数据
+              globalData[uEmail] = local;
+            } else {
+              // 远端有数据，比较时间戳
+              if (local.pub && local.pub.ts > (remote.pub?.ts || 0)) {
+                globalData[uEmail].pub = local.pub;
+              }
+              if (local.sec && local.sec.ts > (remote.sec?.ts || 0)) {
+                globalData[uEmail].sec = local.sec;
+              }
+              // 保留用户名
+              if (local.username) {
+                globalData[uEmail].username = local.username;
+              }
+            }
+          });
+
+          // 特别保护当前用户的数据
+          if (myLocalData) {
+            if (myLocalData.pub && myLocalData.pub.ts > (globalData[email]?.pub?.ts || 0)) {
+              if (!globalData[email]) globalData[email] = {};
+              globalData[email].pub = myLocalData.pub;
+            }
+            if (myLocalData.sec && myLocalData.sec.ts > (globalData[email]?.sec?.ts || 0)) {
+              if (!globalData[email]) globalData[email] = {};
+              globalData[email].sec = myLocalData.sec;
+            }
+            if (myLocalData.username) {
+              if (!globalData[email]) globalData[email] = {};
+              globalData[email].username = myLocalData.username;
+            }
           }
+
           saveLocal('globalData', globalData);
           updateSyncUI('ok', '已同步');
         }
-      }
-    }
-
-    // 恢复当前用户的本地任务状态（如果之前保存了）
-    if (myLocalData && AuthAPI && AuthAPI.isLoggedIn()) {
-      const email = AuthAPI.getCurrentUser().email;
-      // 如果远端数据过期（本地更新），使用本地数据
-      if (globalData[email] && myLocalData.pub && myLocalData.pub.ts > (globalData[email].pub?.ts || 0)) {
-        globalData[email].pub = myLocalData.pub;
-      }
-      if (globalData[email] && myLocalData.sec && myLocalData.sec.ts > (globalData[email].sec?.ts || 0)) {
-        globalData[email].sec = myLocalData.sec;
       }
     }
   }
@@ -715,17 +772,40 @@
       setInterval(async () => {
         const data = await fetchGlobal();
         if (data !== null) {
-          // 合并远端数据：保留当前用户的本地状态（本地始终为最新）
-          if (AuthAPI && AuthAPI.isLoggedIn()) {
-            const email = AuthAPI.getCurrentUser().email;
-            const myLocalData = globalData[email];
-            globalData = data;
-            if (myLocalData) {
-              globalData[email] = myLocalData;
+          // 保存所有用户的本地最新数据
+          const allLocalData = {};
+          Object.keys(globalData).forEach(email => {
+            if (!email.startsWith('_') && globalData[email]) {
+              allLocalData[email] = JSON.parse(JSON.stringify(globalData[email]));
             }
-          } else {
-            globalData = data;
-          }
+          });
+
+          // 合并远端数据：保留所有用户的本地最新状态
+          globalData = data;
+
+          // 合并所有用户的本地数据（取时间戳最新的）
+          Object.keys(allLocalData).forEach(email => {
+            const local = allLocalData[email];
+            const remote = globalData[email];
+
+            if (!remote) {
+              // 远端没有该用户，使用本地数据
+              globalData[email] = local;
+            } else {
+              // 远端有数据，比较时间戳
+              if (local.pub && local.pub.ts > (remote.pub?.ts || 0)) {
+                globalData[email].pub = local.pub;
+              }
+              if (local.sec && local.sec.ts > (remote.sec?.ts || 0)) {
+                globalData[email].sec = local.sec;
+              }
+              // 保留用户名
+              if (local.username) {
+                globalData[email].username = local.username;
+              }
+            }
+          });
+
           updateSyncUI('ok', '已同步');
           updateUI();
         } else {
