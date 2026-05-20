@@ -444,8 +444,8 @@
     const currentEmail = currentUser ? currentUser.email : null;
 
     Object.keys(globalData).forEach(email => {
-      // 跳过内部数据键（_users, _userData）
-      if (email.startsWith('_')) return;
+      // 跳过内部数据键（_users, _userData）和当前用户自己（自己的任务在上方展示）
+      if (email.startsWith('_') || email === currentEmail) return;
       const d = globalData[email];
       const card = document.createElement('div');
       card.className = 'status-card';
@@ -1058,9 +1058,6 @@
       history = [];
       customTasks = [];
       if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
-
-      // 清除记住的凭据
-      AuthAPI.clearRememberedCredentials();
 
       AuthAPI.logout();
       location.reload(); // 刷新页面重新初始化
