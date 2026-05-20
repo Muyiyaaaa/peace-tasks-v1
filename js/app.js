@@ -119,16 +119,23 @@
     const task = (async () => {
       const data = globalData; // 执行时重新读取最新数据
 
+      console.log('[saveGlobal] 开始保存，当前 globalData:', JSON.stringify(data));
+
       // 始终缓存到 localStorage，防止页面刷新后 Gist 不可用时丢失任务状态
       saveLocal('globalData', data);
 
       if (!HAS_GIST || !GIST_PAT) {
+        console.log('[saveGlobal] 未配置 Gist，跳过远程保存');
         return;
       }
       try {
         // 合并当前 Gist 数据，避免覆盖 auth 数据（_users, _userData）
         const currentData = await fetchGlobal();
+        console.log('[saveGlobal] 从 Gist 获取的当前数据:', JSON.stringify(currentData));
+
         const merged = { ...(currentData || {}), ...data };
+        console.log('[saveGlobal] 初步合并后的数据:', JSON.stringify(merged));
+
         // 确保 auth 数据不被覆盖
         if (currentData) {
           if (currentData._users && !data._users) merged._users = currentData._users;
@@ -144,12 +151,23 @@
               // 两边都有，比较时间戳
               const local = data[email];
               const remote = currentData[email];
+
+              console.log(`[saveGlobal] 合并用户 ${email} 数据 - 本地:`, JSON.stringify(local), '远端:', JSON.stringify(remote));
+
               if (remote.pub && (!local.pub || remote.pub.ts > local.pub.ts)) {
                 merged[email].pub = remote.pub;
+                console.log(`[saveGlobal] 用户 ${email} 使用远端 pub 数据`);
+              } else {
+                console.log(`[saveGlobal] 用户 ${email} 保留本地 pub 数据`);
               }
+
               if (remote.sec && (!local.sec || remote.sec.ts > local.sec.ts)) {
                 merged[email].sec = remote.sec;
+                console.log(`[saveGlobal] 用户 ${email} 使用远端 sec 数据`);
+              } else {
+                console.log(`[saveGlobal] 用户 ${email} 保留本地 sec 数据`);
               }
+
               // 保留用户名
               if (remote.username && !local.username) {
                 merged[email].username = remote.username;
@@ -158,10 +176,13 @@
           });
         }
 
+        console.log('[saveGlobal] 最终合并数据:', JSON.stringify(merged));
+
         const body = JSON.stringify({
           files: { [GIST_FILE]: { content: JSON.stringify(merged) } }
         });
-        await fetchWithTimeout(`https://api.github.com/gists/${GIST_ID}`, {
+
+        const response = await fetchWithTimeout(`https://api.github.com/gists/${GIST_ID}`, {
           method: 'PATCH',
           headers: {
             Authorization: `Bearer ${GIST_PAT}`,
@@ -169,8 +190,15 @@
           },
           body
         });
+
+        console.log('[saveGlobal] Gist 响应状态:', response.status);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('[saveGlobal] Gist 保存失败:', errorText);
+        }
       } catch (e) {
-        console.warn('Gist save error:', e);
+        console.error('[saveGlobal] Gist save error:', e);
       }
     })();
 
@@ -550,6 +578,19 @@
     const user = AuthAPI.getCurrentUser();
     const email = user.email;
 
+    // 检查5分钟冷却时间(防重新登录绕过)
+    const existingData = globalData[email];
+    if (existingData) {
+      if (existingData.pub && isTaskActive(existingData.pub.ts)) {
+        showToast('公开任务冷却中,请稍后再试');
+        return;
+      }
+      if (existingData.sec && isTaskActive(existingData.sec.ts)) {
+        showToast('隐藏任务冷却中,请稍后再试');
+        return;
+      }
+    }
+
     const pool = getFilteredEvents();
     const idx = Math.floor(Math.random() * pool.length);
     const realIdx = EVENTS.indexOf(pool[idx]);
@@ -576,6 +617,19 @@
 
     const user = AuthAPI.getCurrentUser();
     const email = user.email;
+
+    // 检查5分钟冷却时间(防重新登录绕过)
+    const existingData = globalData[email];
+    if (existingData) {
+      if (existingData.pub && isTaskActive(existingData.pub.ts)) {
+        showToast('公开任务冷却中,请稍后再试');
+        return;
+      }
+      if (existingData.sec && isTaskActive(existingData.sec.ts)) {
+        showToast('隐藏任务冷却中,请稍后再试');
+        return;
+      }
+    }
 
     const pool = getFilteredEvents();
     const idx = Math.floor(Math.random() * pool.length);
