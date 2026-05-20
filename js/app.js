@@ -578,17 +578,11 @@
     const user = AuthAPI.getCurrentUser();
     const email = user.email;
 
-    // 检查5分钟冷却时间(防重新登录绕过)
+    // 只检查公开任务冷却（与隐藏任务独立）
     const existingData = globalData[email];
-    if (existingData) {
-      if (existingData.pub && isTaskActive(existingData.pub.ts)) {
-        showToast('公开任务冷却中,请稍后再试');
-        return;
-      }
-      if (existingData.sec && isTaskActive(existingData.sec.ts)) {
-        showToast('隐藏任务冷却中,请稍后再试');
-        return;
-      }
+    if (existingData && existingData.pub && isTaskActive(existingData.pub.ts)) {
+      showToast('公开任务冷却中,请稍后再试');
+      return;
     }
 
     const pool = getFilteredEvents();
@@ -618,17 +612,11 @@
     const user = AuthAPI.getCurrentUser();
     const email = user.email;
 
-    // 检查5分钟冷却时间(防重新登录绕过)
+    // 只检查隐藏任务冷却（与公开任务独立）
     const existingData = globalData[email];
-    if (existingData) {
-      if (existingData.pub && isTaskActive(existingData.pub.ts)) {
-        showToast('公开任务冷却中,请稍后再试');
-        return;
-      }
-      if (existingData.sec && isTaskActive(existingData.sec.ts)) {
-        showToast('隐藏任务冷却中,请稍后再试');
-        return;
-      }
+    if (existingData && existingData.sec && isTaskActive(existingData.sec.ts)) {
+      showToast('隐藏任务冷却中,请稍后再试');
+      return;
     }
 
     const pool = getFilteredEvents();
@@ -806,9 +794,33 @@
         updateSyncUI('error', '同步失败，离线模式');
         globalData = JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'globalData') || '{}');
       } else {
-        globalData = data;
-        // Gist 同步成功后更新本地缓存，确保下次页面加载有回退数据
-        saveLocal('globalData', data);
+        // 合并 Gist 数据与本地缓存，防止 PATCH 失败时 Gist 数据过旧
+        const localData = JSON.parse(localStorage.getItem(STORAGE_PREFIX + 'globalData') || '{}');
+        const merged = { ...data };
+        Object.keys(localData).forEach(email => {
+          if (email.startsWith('_')) return;
+          const local = localData[email];
+          const remote = data[email];
+          if (!remote) {
+            merged[email] = local;
+          } else {
+            // 保留时间戳更新的版本
+            if (local.pub && local.pub.ts > (remote.pub?.ts || 0)) {
+              if (!merged[email]) merged[email] = {};
+              merged[email].pub = local.pub;
+            }
+            if (local.sec && local.sec.ts > (remote.sec?.ts || 0)) {
+              if (!merged[email]) merged[email] = {};
+              merged[email].sec = local.sec;
+            }
+            if (local.username && !remote.username) {
+              if (!merged[email]) merged[email] = {};
+              merged[email].username = local.username;
+            }
+          }
+        });
+        globalData = merged;
+        saveLocal('globalData', merged);
         updateSyncUI('ok', '已同步');
       }
     } else {
