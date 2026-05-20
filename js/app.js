@@ -577,7 +577,19 @@
     const user = AuthAPI.getCurrentUser();
     const email = user.email;
 
-    // 不再检查公开任务冷却，允许随时重新领取
+    // ===== 5分钟冷却检查：双重校验 =====
+    // 校验1：getMyTask 检查
+    const existing = getMyTask('pub');
+    if (existing && isTaskActive(existing.ts)) {
+      showToast('任务冷却中，请等待5分钟后再领取');
+      return;
+    }
+    // 校验2：fallback 直接检查 globalData（防止重新登录绕过）
+    if (globalData[email] && globalData[email].pub && globalData[email].pub.ts && isTaskActive(globalData[email].pub.ts)) {
+      showToast('任务冷却中，请等待5分钟后再领取');
+      return;
+    }
+
     const pool = getFilteredEvents();
     const idx = Math.floor(Math.random() * pool.length);
     const realIdx = EVENTS.indexOf(pool[idx]);
@@ -605,7 +617,19 @@
     const user = AuthAPI.getCurrentUser();
     const email = user.email;
 
-    // 不再检查隐藏任务冷却，允许随时重新领取
+    // ===== 5分钟冷却检查：双重校验 =====
+    // 校验1：getMyTask 检查
+    const existing = getMyTask('sec');
+    if (existing && isTaskActive(existing.ts)) {
+      showToast('任务冷却中，请等待5分钟后再领取');
+      return;
+    }
+    // 校验2：fallback 直接检查 globalData（防止重新登录绕过）
+    if (globalData[email] && globalData[email].sec && globalData[email].sec.ts && isTaskActive(globalData[email].sec.ts)) {
+      showToast('任务冷却中，请等待5分钟后再领取');
+      return;
+    }
+
     const pool = getFilteredEvents();
     const idx = Math.floor(Math.random() * pool.length);
     const realIdx = EVENTS.indexOf(pool[idx]);
