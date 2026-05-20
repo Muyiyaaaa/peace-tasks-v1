@@ -6,6 +6,7 @@
 
   const AUTH_STORAGE_PREFIX = 'pea_auth_';
   const USER_DATA_PREFIX = 'pea_user_';
+  const REMEMBERED_CREDENTIALS_KEY = AUTH_STORAGE_PREFIX + 'remembered';
 
   // Gist 配置
   const _cfg = typeof CONFIG !== 'undefined' ? CONFIG : {};
@@ -180,7 +181,7 @@
     currentUser = user;
     localStorage.setItem(AUTH_STORAGE_PREFIX + 'current', email);
 
-    return { success: true, message: '登录成功', user: user };
+    return { success: true, message: '登录成功', user: user, rawPassword: password };
   }
 
   // 登出
@@ -318,6 +319,41 @@
     return { success: true, message: '用户名修改成功' };
   }
 
+  // 保存记住的凭据
+  function saveRememberedCredentials(email, password) {
+    try {
+      const credentials = {
+        email: email,
+        password: password, // 已哈希的密码
+        timestamp: Date.now()
+      };
+      localStorage.setItem(REMEMBERED_CREDENTIALS_KEY, JSON.stringify(credentials));
+    } catch (e) {
+      console.warn('Failed to save remembered credentials:', e);
+    }
+  }
+
+  // 获取记住的凭据
+  function getRememberedCredentials() {
+    try {
+      const data = localStorage.getItem(REMEMBERED_CREDENTIALS_KEY);
+      if (!data) return null;
+      return JSON.parse(data);
+    } catch (e) {
+      console.warn('Failed to get remembered credentials:', e);
+      return null;
+    }
+  }
+
+  // 清除记住的凭据
+  function clearRememberedCredentials() {
+    try {
+      localStorage.removeItem(REMEMBERED_CREDENTIALS_KEY);
+    } catch (e) {
+      console.warn('Failed to clear remembered credentials:', e);
+    }
+  }
+
   // 导出API
   window.AuthAPI = {
     register,
@@ -332,7 +368,10 @@
     changeUsername,
     isValidEmail,
     ready: _initPromise,
-    syncToGist: syncAllToGist
+    syncToGist: syncAllToGist,
+    saveRememberedCredentials,
+    getRememberedCredentials,
+    clearRememberedCredentials
   };
 
 })();

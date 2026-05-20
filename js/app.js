@@ -220,7 +220,7 @@
     const email = AuthAPI.getCurrentUser().email;
     const d = globalData[email];
     if (!d || !d[type]) return null;
-    if (!isTaskActive(d[type].ts)) return null; // 任务已过期
+    // 不再检查任务是否过期，保持任务状态直到用户重新领取
     return { idx: d[type].idx, ts: d[type].ts };
   }
 
@@ -296,8 +296,8 @@
       const ev = EVENTS[pub.idx % EVENTS.length];
       showPublicTask(ev);
       pubTs = pub.ts;
-      document.getElementById('publicBtn').textContent = '领取任务';
-      document.getElementById('publicBtn').disabled = true;
+      document.getElementById('publicBtn').textContent = '重新领取';
+      document.getElementById('publicBtn').disabled = false;
     } else {
       showPublicEmpty();
       pubTs = null;
@@ -312,8 +312,8 @@
       const ev = EVENTS[sec.idx % EVENTS.length];
       showSecretTask(ev, true);
       secTs = sec.ts;
-      document.getElementById('secretBtn').textContent = '领取隐藏';
-      document.getElementById('secretBtn').disabled = true;
+      document.getElementById('secretBtn').textContent = '重新领取';
+      document.getElementById('secretBtn').disabled = false;
     } else {
       showSecretEmpty();
       secTs = null;
@@ -403,16 +403,7 @@
       const pub = getMyTask('pub');
       const sec = getMyTask('sec');
 
-      // 所有任务已过期，刷新UI并停止计时
-      if (!pub && !sec) {
-        updateUI();
-        return;
-      }
-
-      // 单个任务过期时更新对应卡片（使按钮恢复可用）
-      if (!pub) updatePublicCard();
-      if (!sec) updateSecretCard();
-
+      // 任务不再自动过期，但计时器仍然显示剩余时间
       if (pub) {
         const rem = Math.max(0, LOCK_MS - (Date.now() - pub.ts));
         document.getElementById('timerFill').style.width = (rem / LOCK_MS * 100) + '%';
@@ -430,7 +421,13 @@
       let minRem = Infinity;
       if (pub) minRem = Math.min(minRem, LOCK_MS - (Date.now() - pub.ts));
       if (sec) minRem = Math.min(minRem, LOCK_MS - (Date.now() - sec.ts));
-      document.getElementById('timerText').textContent = fmt(Math.max(0, minRem));
+
+      // 如果所有任务都超过5分钟，显示已过期
+      if (minRem === Infinity || minRem < 0) {
+        document.getElementById('timerText').textContent = '已过期';
+      } else {
+        document.getElementById('timerText').textContent = fmt(Math.max(0, minRem));
+      }
     }
 
     tick();
@@ -447,8 +444,8 @@
     const currentEmail = currentUser ? currentUser.email : null;
 
     Object.keys(globalData).forEach(email => {
-      // 跳过内部数据键（_users, _userData）和当前用户自己
-      if (email.startsWith('_') || email === currentEmail) return;
+      // 跳过内部数据键（_users, _userData）
+      if (email.startsWith('_')) return;
       const d = globalData[email];
       const card = document.createElement('div');
       card.className = 'status-card';
@@ -476,21 +473,23 @@
       const list = document.createElement('div');
       list.className = 'status-task-list';
 
-      const hasPub = d && d.pub && isTaskActive(d.pub.ts);
-      const hasSec = d && d.sec && isTaskActive(d.sec.ts);
+      const hasPub = d && d.pub && d.pub.ts;
+      const hasSec = d && d.sec && d.sec.ts;
 
       if (hasPub) {
         const row = document.createElement('div');
         row.className = 'status-row';
         const ev = EVENTS[d.pub.idx % EVENTS.length];
-        row.innerHTML = `<span class="t-type pub">公开</span><span class="t-text">${ev ? ev.text : '(已领取)'}</span><span class="t-time">${fmtTime(d.pub.ts)}</span>`;
+        const isActive = isTaskActive(d.pub.ts);
+        row.innerHTML = `<span class="t-type pub">公开</span><span class="t-text">${isActive ? (ev ? ev.text : '(已领取)') : '(已过期)'}</span><span class="t-time">${fmtTime(d.pub.ts)}</span>`;
         list.appendChild(row);
       }
 
       if (hasSec) {
         const row = document.createElement('div');
         row.className = 'status-row';
-        row.innerHTML = `<span class="t-type sec">隐藏</span><span class="t-text">🔒 已领取</span><span class="t-time">${fmtTime(d.sec.ts)}</span>`;
+        const isActive = isTaskActive(d.sec.ts);
+        row.innerHTML = `<span class="t-type sec">隐藏</span><span class="t-text">${isActive ? '🔒 已领取' : '(已过期)'}</span><span class="t-time">${fmtTime(d.sec.ts)}</span>`;
         list.appendChild(row);
       }
 
@@ -578,13 +577,7 @@
     const user = AuthAPI.getCurrentUser();
     const email = user.email;
 
-    // 只检查公开任务冷却（与隐藏任务独立）
-    const existingData = globalData[email];
-    if (existingData && existingData.pub && isTaskActive(existingData.pub.ts)) {
-      showToast('公开任务冷却中,请稍后再试');
-      return;
-    }
-
+    // 不再检查公开任务冷却，允许随时重新领取
     const pool = getFilteredEvents();
     const idx = Math.floor(Math.random() * pool.length);
     const realIdx = EVENTS.indexOf(pool[idx]);
@@ -612,13 +605,7 @@
     const user = AuthAPI.getCurrentUser();
     const email = user.email;
 
-    // 只检查隐藏任务冷却（与公开任务独立）
-    const existingData = globalData[email];
-    if (existingData && existingData.sec && isTaskActive(existingData.sec.ts)) {
-      showToast('隐藏任务冷却中,请稍后再试');
-      return;
-    }
-
+    // 不再检查隐藏任务冷却，允许随时重新领取
     const pool = getFilteredEvents();
     const idx = Math.floor(Math.random() * pool.length);
     const realIdx = EVENTS.indexOf(pool[idx]);
@@ -779,6 +766,8 @@
     const loggedIn = typeof AuthAPI !== 'undefined' && AuthAPI.isLoggedIn();
     if (AUTH_REQUIRED && !loggedIn) {
       showAuthModal();
+      // 自动填充记住的凭据
+      fillRememberedCredentials();
     } else if (loggedIn) {
       updateAuthUI();
       loadUserData();
@@ -918,6 +907,22 @@
     }
   }
 
+  // 自动填充记住的凭据
+  function fillRememberedCredentials() {
+    if (!AuthAPI || !AuthAPI.getRememberedCredentials) return;
+
+    const credentials = AuthAPI.getRememberedCredentials();
+    if (credentials) {
+      const emailInput = document.getElementById('loginEmail');
+      const passwordInput = document.getElementById('loginPassword');
+      const rememberCheckbox = document.getElementById('loginRemember');
+
+      if (emailInput) emailInput.value = credentials.email || '';
+      if (passwordInput) passwordInput.value = credentials.password || '';
+      if (rememberCheckbox) rememberCheckbox.checked = true;
+    }
+  }
+
   // 切换认证标签
   window.switchAuthTab = function(tab) {
     const tabLogin = document.getElementById('tabLogin');
@@ -942,6 +947,7 @@
   window.handleLogin = async function() {
     const email = document.getElementById('loginEmail').value.trim();
     const password = document.getElementById('loginPassword').value;
+    const remember = document.getElementById('loginRemember').checked;
     const hint = document.getElementById('loginHint');
 
     if (!email || !password) {
@@ -957,9 +963,17 @@
       updateAuthUI();
       loadUserData();
 
+      // 保存或清除记住的凭据
+      if (remember) {
+        AuthAPI.saveRememberedCredentials(email, result.rawPassword);
+      } else {
+        AuthAPI.clearRememberedCredentials();
+      }
+
       // 清空表单字段
       document.getElementById('loginEmail').value = '';
       document.getElementById('loginPassword').value = '';
+      document.getElementById('loginRemember').checked = false;
 
       // 确保 globalData 已加载（修复重新登录数据丢失问题）
       await ensureGlobalData();
@@ -1027,6 +1041,10 @@
       history = [];
       customTasks = [];
       if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+
+      // 清除记住的凭据
+      AuthAPI.clearRememberedCredentials();
+
       AuthAPI.logout();
       location.reload(); // 刷新页面重新初始化
     }

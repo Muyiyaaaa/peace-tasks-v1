@@ -666,6 +666,31 @@ body{
   font-size:14px;
 }
 
+/* 记住我复选框 */
+.auth-remember-row{
+  margin-bottom:16px;
+  display:flex;
+  align-items:center;
+}
+.auth-remember-label{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  font-size:13px;
+  color:var(--text-secondary);
+  cursor:pointer;
+  user-select:none;
+}
+.auth-remember-label input[type="checkbox"]{
+  width:16px;
+  height:16px;
+  cursor:pointer;
+  accent-color:var(--accent-blue);
+}
+.auth-remember-label:hover{
+  color:var(--text-primary);
+}
+
 /* 未登录遮罩 */
 .auth-lock-overlay{
   position:fixed;

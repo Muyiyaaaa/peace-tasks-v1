@@ -151,6 +151,11 @@
           <input class="modal-input auth-input" id="loginPassword" type="password" placeholder="密码" autocomplete="current-password">
           <span class="pwd-toggle" onclick="togglePwd('loginPassword',this)">👁️</span>
         </div>
+        <div class="auth-remember-row">
+          <label class="auth-remember-label">
+            <input type="checkbox" id="loginRemember"> 记住邮箱和密码
+          </label>
+        </div>
         <div class="modal-hint" id="loginHint"></div>
         <button class="modal-btn modal-confirm auth-submit-btn" onclick="handleLogin()">登录</button>
       </div>
